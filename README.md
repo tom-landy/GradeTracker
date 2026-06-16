@@ -18,6 +18,13 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Class overview
+
+The **Overview** tab in the admin shows a single matrix of every student against
+every unit, with each student's unit grade (D/M/P/Working), exam units marked as
+sat, an overall completion %, and a per-unit grade distribution row. Click any
+student to jump to their marking grid.
+
 ## Years & exam units
 
 Units are grouped into **Year 1** (Units 1, 2, 3, 4, 8, 9, 27) and **Year 2**

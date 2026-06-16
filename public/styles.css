@@ -108,6 +108,19 @@ details summary { cursor: pointer; }
 }
 .exam-unit { background: #f0fdfa; border-left: 4px solid #0f766e; padding-left: 0.75rem; }
 .exam-msg { margin: 0.3rem 0 0; }
+
+/* Class overview matrix */
+.container.wide { max-width: 1300px; }
+.overview-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table.overview { border-collapse: collapse; font-size: 0.85rem; width: 100%; background: #fff; }
+table.overview th, table.overview td { border: 1px solid var(--line); padding: 0.35rem 0.5rem; text-align: center; white-space: nowrap; }
+table.overview thead th { background: #f1f5f9; position: sticky; top: 0; z-index: 1; }
+table.overview .grade { margin: 0; min-width: 1.3rem; }
+table.overview tfoot td { background: #f8fafc; font-variant-numeric: tabular-nums; }
+.sticky-col { position: sticky; left: 0; background: #fff; text-align: left !important; z-index: 1; }
+table.overview thead .sticky-col { z-index: 3; background: #f1f5f9; }
+table.overview tbody tr:hover td { background: #f8fafc; }
+table.overview tbody tr:hover .sticky-col { background: #f1f5f9; }
 .narrow-ish { max-width: 640px; }
 code { background: #eef2ff; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
 form { margin: 0; }

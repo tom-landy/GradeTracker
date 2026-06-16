@@ -342,6 +342,40 @@ app.post('/admin/criteria/:id/delete', requireAdmin, (req, res) => {
   res.redirect('/admin/units');
 });
 
+// ---- Admin: class overview --------------------------------------------------
+
+app.get('/admin/overview', requireAdmin, (req, res) => {
+  const unitNum = (name) => {
+    const m = String(name).match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 999;
+  };
+  const units = store.buildTree()
+    .filter((u) => !u.exam)
+    .map((u) => ({ id: u.id, name: u.name, num: unitNum(u.name), year: u.year }))
+    .sort((a, b) => a.year - b.year || a.num - b.num);
+  const exams = store.examUnits();
+
+  const students = store.studentsOrdered().map((s) => ({
+    id: s.id,
+    label: store.publicLabel(s),
+    summary: store.progressSummary(s.id),
+    grades: units.map((u) => store.gradeForUnit(s.id, u.id)),
+  }));
+
+  // Per-unit grade distribution for the footer row.
+  const totals = units.map((u, i) => {
+    const c = { D: 0, M: 0, P: 0, U: 0, none: 0 };
+    for (const s of students) {
+      const g = s.grades[i].grade;
+      if (!g) c.none += 1;
+      else c[g] += 1;
+    }
+    return c;
+  });
+
+  res.render('overview', { units, exams, students, totals });
+});
+
 // ---- Student read-only view -------------------------------------------------
 
 app.get('/s/:token', (req, res) => {
