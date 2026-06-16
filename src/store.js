@@ -96,6 +96,29 @@ function getSettings() {
   return load().settings;
 }
 
+// Per-unit criteria-code overrides for tabs whose headers aren't P/M/D codes
+// (e.g. numeric). { "Unit 8": ["P1","P2", ...] }
+function getTabCodes() {
+  load();
+  if (!db.settings.tabCodes) db.settings.tabCodes = {};
+  return db.settings.tabCodes;
+}
+
+function setTabCode(unitName, codesStr) {
+  load();
+  if (!db.settings.tabCodes) db.settings.tabCodes = {};
+  const codes = String(codesStr || '').split(/[\s,]+/).filter(Boolean).map((c) => c.toUpperCase());
+  const name = String(unitName || '').trim();
+  if (name && codes.length) db.settings.tabCodes[name] = codes;
+  save();
+}
+
+function deleteTabCode(unitName) {
+  load();
+  if (db.settings.tabCodes) delete db.settings.tabCodes[String(unitName || '').trim()];
+  save();
+}
+
 function unitsOrdered() {
   return [...load().units].sort((a, b) => a.position - b.position);
 }
@@ -561,6 +584,9 @@ function setProgress(studentId, criterionId, complete) {
 module.exports = {
   criterionType,
   getSettings,
+  getTabCodes,
+  setTabCode,
+  deleteTabCode,
   buildTree,
   unitsOrdered,
   allCriteria,

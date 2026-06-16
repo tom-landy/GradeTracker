@@ -222,7 +222,8 @@ function valueIsName(v) {
   return /[A-Za-z]{2,}/.test(v) && !MARK_VALUES.has(v.toLowerCase()) && !/^\d+$/.test(v);
 }
 
-// Does a column hold actual names (not marks/numbers/blanks)?
+// Does a column hold actual names (not marks/numbers/blanks)? Requires the
+// column to be reasonably populated so a sparse ID column isn't mistaken for one.
 function columnIsNames(rows, h, c) {
   if (c < 0) return false;
   let names = 0;
@@ -233,7 +234,7 @@ function columnIsNames(rows, h, c) {
     total += 1;
     if (valueIsName(v)) names += 1;
   }
-  return total > 0 && names / total >= 0.5;
+  return total >= 3 && names / total >= 0.5;
 }
 
 // Locate the student-number, first-name and surname columns. Returns null if the
@@ -327,13 +328,91 @@ function groupAssignments(critCols) {
   return groups.map((g, i) => ({ name: 'A' + (i + 1), criteria: g.codes }));
 }
 
+function columnIsEmpty(rows, c) {
+  for (let r = 0; r < rows.length; r += 1) {
+    if (cell(rows, r, c) !== '') return false;
+  }
+  return true;
+}
+
+// For tabs whose criteria headers aren't P/M/D codes (e.g. numeric), use a
+// teacher-supplied ordered code list. Detect the name columns and the run of
+// mark columns from the data, then map the codes onto the mark columns (1:1, or
+// in pairs if criteria span two columns each). No header row required.
+function parseOverrideTab(sheet, unitName, codes) {
+  const rows = sheet.rows || [];
+  // Data-driven name columns (scan from row 0 since the header is unreliable).
+  let firstCol = -1;
+  let surnameCol = -1;
+  for (let c = 0; c < 8; c += 1) {
+    if (columnIsNames(rows, -1, c) && columnIsNames(rows, -1, c + 1)) {
+      firstCol = c;
+      surnameCol = c + 1;
+      break;
+    }
+  }
+  if (firstCol < 0) return { skip: { name: sheet.name, reason: 'override set, but no name columns found' } };
+  let numberCol = -1;
+  if (firstCol > 0 && columnLooksLikeIds(rows, -1, firstCol - 1)) numberCol = firstCol - 1;
+
+  // Collect the contiguous run of mark (y/n/r/u) columns after the surname.
+  const maxCol = rows.reduce((m, r) => Math.max(m, (r || []).length), 0);
+  const markCols = [];
+  for (let c = surnameCol + 1; c < maxCol; c += 1) {
+    if (columnIsMarks(rows, -1, c)) markCols.push(c);
+    else if (columnIsEmpty(rows, c) && columnIsMarks(rows, -1, c + 1)) continue; // merge gap
+    else break;
+  }
+
+  let groups;
+  if (markCols.length === codes.length) groups = markCols.map((c) => [c]);
+  else if (markCols.length === codes.length * 2) {
+    groups = [];
+    for (let i = 0; i < markCols.length; i += 2) groups.push([markCols[i], markCols[i + 1]]);
+  } else {
+    return { skip: { name: sheet.name, reason: `override has ${codes.length} codes but found ${markCols.length} mark columns` } };
+  }
+
+  const students = [];
+  for (let r = 0; r < rows.length; r += 1) {
+    const first = cell(rows, r, firstCol);
+    const last = cell(rows, r, surnameCol);
+    if (!valueIsName(first)) continue;
+    const rawNumber = numberCol >= 0 ? cell(rows, r, numberCol) : '';
+    const studentNumber = /\d/.test(rawNumber) ? rawNumber : '';
+    const marks = {};
+    groups.forEach((cols, i) => {
+      const vals = cols.map((c) => cell(rows, r, c)).filter((v) => v !== '');
+      marks[codes[i]] = vals.length > 0 && vals.every((v) => isComplete(v));
+    });
+    students.push({ studentNumber, firstName: first, lastName: last, name: (first + ' ' + last).trim(), marks });
+  }
+
+  return {
+    unit: {
+      name: unitName,
+      tab: sheet.name,
+      assignments: [{ name: 'A1', criteria: codes.slice() }],
+      inferredCodes: [],
+      skippedRows: 0,
+      overrideUsed: true,
+      students,
+    },
+  };
+}
+
 // Parse criterion-level tabs into an import payload:
 //   units: [{ name, tab, assignments:[{name,criteria}], inferredCodes:[...],
 //             students:[{ studentNumber, firstName, lastName, name, marks:{CODE:bool} }] }]
 //   skipped: [{ name, reason }]
-function parseWorkbook(sheets) {
+function parseWorkbook(sheets, options = {}) {
   const units = [];
   const skipped = [];
+  // overrides: { normalisedUnitName: [codes...] } for tabs lacking P/M/D headers.
+  const overrides = {};
+  for (const [name, codes] of Object.entries(options.overrides || {})) {
+    overrides[normKey(name)] = Array.isArray(codes) ? codes : String(codes).split(/[\s,]+/).filter(Boolean);
+  }
 
   for (const sheet of sheets) {
     const unitName = unitNameFromTab(sheet.name);
@@ -341,6 +420,15 @@ function parseWorkbook(sheets) {
       skipped.push({ name: sheet.name, reason: 'not a unit tab' });
       continue;
     }
+
+    const override = overrides[normKey(unitName)];
+    if (override && override.length) {
+      const res = parseOverrideTab(sheet, unitName, override.map((c) => c.toUpperCase()));
+      if (res.unit) units.push(res.unit);
+      else skipped.push(res.skip);
+      continue;
+    }
+
     const rows = sheet.rows || [];
     const h = findHeaderRowIdx(rows);
     if (h < 0) {

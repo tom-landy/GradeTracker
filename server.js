@@ -225,7 +225,7 @@ app.post('/admin/import-xlsx', requireAdmin, upload.single('file'), (req, res) =
       payload: null,
     });
   }
-  const payload = parseWorkbook(sheets);
+  const payload = parseWorkbook(sheets, { overrides: store.getTabCodes() });
   if (payload.units.length === 0) {
     return res.status(400).render('import_workbook_result', {
       error: 'No criterion-level tabs found. Tabs need a unit name (e.g. "Unit 8" '
@@ -250,7 +250,7 @@ app.post('/admin/sync', requireAdmin, async (req, res) => {
   try {
     const buffer = await sync.fetchWorkbook();
     const sheets = readWorkbook(buffer);
-    const payload = parseWorkbook(sheets);
+    const payload = parseWorkbook(sheets, { overrides: store.getTabCodes() });
     if (payload.units.length === 0) {
       return res.status(400).render('import_workbook_result', {
         error: 'Synced the file, but found no criterion-level tabs to import.',
@@ -272,7 +272,18 @@ app.post('/admin/sync', requireAdmin, async (req, res) => {
 // ---- Admin: units / assignments / criteria ----------------------------------
 
 app.get('/admin/units', requireAdmin, (req, res) => {
-  res.render('units_admin', { tree: store.buildTree() });
+  res.render('units_admin', { tree: store.buildTree(), tabCodes: store.getTabCodes() });
+});
+
+// Criteria-code override for a tab whose headers aren't P/M/D codes.
+app.post('/admin/tab-codes', requireAdmin, (req, res) => {
+  store.setTabCode(req.body.unit, req.body.codes);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/tab-codes/delete', requireAdmin, (req, res) => {
+  store.deleteTabCode(req.body.unit);
+  res.redirect('/admin/units');
 });
 
 app.post('/admin/units', requireAdmin, (req, res) => {
