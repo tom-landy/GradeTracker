@@ -44,6 +44,8 @@ app.use((req, res, next) => {
   res.locals.title = store.getSettings().title;
   res.locals.publicLabel = store.publicLabel;
   res.locals.fullName = store.fullName;
+  res.locals.examUnits = store.examUnits();
+  res.locals.examInfo = store.getExamInfo();
   next();
 });
 

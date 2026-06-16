@@ -44,28 +44,44 @@
     <span class="legend outstanding">outstanding</span>
   </p>
 
-  <% tree.forEach(function (unit) { %>
-    <section class="unit">
-      <h3><%= unit.name %>
-        <% if (unit.grade && unit.grade.grade) { %>
-          <span class="grade grade-<%= unit.grade.grade %>"><%= unit.grade.label %></span>
-        <% } %>
-      </h3>
-      <div class="assignments">
-        <% unit.assignments.forEach(function (a) { %>
-          <div class="assignment">
-            <div class="assignment-name"><%= a.name %></div>
-            <div class="criteria">
-              <% a.criteria.forEach(function (c) { %>
-                <span class="crit <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
-                      title="<%= c.type %><%= c.complete ? ' · complete' : ' · outstanding' %>"><%= c.code %></span>
-              <% }); %>
-              <% if (a.criteria.length === 0) { %><span class="muted small">(none yet)</span><% } %>
+  <% [1, 2].forEach(function (year) {
+       var yearUnits = tree.filter(function (u) { return u.year === year && !u.exam; });
+       var yearExams = examUnits.filter(function (e) { return e.year === year; });
+       if (yearUnits.length === 0 && yearExams.length === 0) return;
+  %>
+    <h2 class="year-head">Year <%= year %></h2>
+
+    <% yearExams.forEach(function (ex) { %>
+      <section class="unit exam-unit">
+        <h3><%= ex.name %> <span class="grade grade-X">Exam</span></h3>
+        <p class="exam-msg">📝 You have been entered for and have sat this exam.
+          <strong><%= examInfo %></strong></p>
+      </section>
+    <% }); %>
+
+    <% yearUnits.forEach(function (unit) { %>
+      <section class="unit">
+        <h3><%= unit.name %>
+          <% if (unit.grade && unit.grade.grade) { %>
+            <span class="grade grade-<%= unit.grade.grade %>"><%= unit.grade.label %></span>
+          <% } %>
+        </h3>
+        <div class="assignments">
+          <% unit.assignments.forEach(function (a) { %>
+            <div class="assignment">
+              <div class="assignment-name"><%= a.name %></div>
+              <div class="criteria">
+                <% a.criteria.forEach(function (c) { %>
+                  <span class="crit <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
+                        title="<%= c.type %><%= c.complete ? ' · complete' : ' · outstanding' %>"><%= c.code %></span>
+                <% }); %>
+                <% if (a.criteria.length === 0) { %><span class="muted small">(none yet)</span><% } %>
+              </div>
             </div>
-          </div>
-        <% }); %>
-      </div>
-    </section>
+          <% }); %>
+        </div>
+      </section>
+    <% }); %>
   <% }); %>
 </main>
 <%- include('partials/foot') %>

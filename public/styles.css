@@ -98,6 +98,16 @@ details summary { cursor: pointer; }
 .grade-P { background: #dbeafe; color: #1e40af; }
 .grade-M { background: #fef3c7; color: #92400e; }
 .grade-D { background: #ede9fe; color: #6d28d9; }
+.grade-X { background: #ccfbf1; color: #0f766e; }
+
+.year-head {
+  margin: 1.75rem 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid var(--ink);
+  font-size: 1.35rem;
+}
+.exam-unit { background: #f0fdfa; border-left: 4px solid #0f766e; padding-left: 0.75rem; }
+.exam-msg { margin: 0.3rem 0 0; }
 .narrow-ish { max-width: 640px; }
 code { background: #eef2ff; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
 form { margin: 0; }

@@ -183,10 +183,42 @@ function allCriteria() {
   return load().criteria;
 }
 
+// Year/exam grouping (by unit number).
+const YEAR1_UNITS = new Set([1, 2, 3, 4, 8, 9, 27]);
+const EXAM_UNITS = [2, 3];
+
+function unitNumber(name) {
+  const m = String(name || '').match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function unitYear(name) {
+  const n = unitNumber(name);
+  return n && YEAR1_UNITS.has(n) ? 1 : 2;
+}
+
+function unitIsExam(name) {
+  const n = unitNumber(name);
+  return n != null && EXAM_UNITS.includes(n);
+}
+
+// Exam units are shown from config (they have no criteria to track).
+function examUnits() {
+  return EXAM_UNITS.map((n) => ({ name: 'Unit ' + n, number: n, year: YEAR1_UNITS.has(n) ? 1 : 2, exam: true }));
+}
+
+function getExamInfo() {
+  load();
+  return db.settings.examInfo || 'Results available 13 August at 08:00 on the student portal.';
+}
+
 // A nested structure that mirrors the printed breakdown: unit -> assignments -> criteria.
+// Each unit is annotated with its year and whether it's an exam unit.
 function buildTree() {
   return unitsOrdered().map((unit) => ({
     ...unit,
+    year: unitYear(unit.name),
+    exam: unitIsExam(unit.name),
     assignments: assignmentsForUnit(unit.id).map((assignment) => ({
       ...assignment,
       criteria: criteriaForAssignment(assignment.id).map((c) => ({
@@ -664,6 +696,10 @@ function setProgress(studentId, criterionId, complete) {
 module.exports = {
   criterionType,
   getSettings,
+  examUnits,
+  getExamInfo,
+  unitYear,
+  unitIsExam,
   getTabCodes,
   setTabCode,
   deleteTabCode,

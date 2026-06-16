@@ -18,6 +18,16 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Years & exam units
+
+Units are grouped into **Year 1** (Units 1, 2, 3, 4, 8, 9, 27) and **Year 2**
+(everything else) on the student page and the admin marking grid. **Units 2 & 3
+are exam units**: instead of criteria they show an exam card noting all students
+are entered and have sat the exam, with the results-release message (default:
+"Results available 13 August at 08:00 on the student portal"). The year/exam
+lists are defined in `src/store.js` (`YEAR1_UNITS`, `EXAM_UNITS`) and the message
+in `settings.examInfo`.
+
 ## Unit grades (Pass / Merit / Distinction)
 
 Each unit shows a calculated grade badge on both the student page and the admin
