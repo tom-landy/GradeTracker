@@ -42,7 +42,8 @@ mounted volume.
 
 **Render (one-click via blueprint):** `render.yaml` is included. Create a new
 Blueprint from this repo, then set `ADMIN_PASSWORD` in the dashboard. It
-provisions a 1 GB persistent disk mounted at `/data`.
+provisions a 1 GB persistent disk mounted at `/data`. See **[DEPLOY.md](DEPLOY.md)**
+for a full step-by-step, non-technical walkthrough.
 
 **Docker / any host:**
 
