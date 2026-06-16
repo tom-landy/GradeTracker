@@ -1,0 +1,21 @@
+# Render.com deployment blueprint.
+# Create a new "Blueprint" service from this repo, then set ADMIN_PASSWORD.
+services:
+  - type: web
+    name: gradetracker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: node server.js
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false # set this yourself in the Render dashboard
+      - key: COOKIE_SECRET
+        generateValue: true # stable secret so admin sessions survive restarts
+      - key: DATA_DIR
+        value: /data
+    # Persistent disk so data/db.json survives restarts and deploys.
+    disk:
+      name: gradetracker-data
+      mountPath: /data
+      sizeGB: 1

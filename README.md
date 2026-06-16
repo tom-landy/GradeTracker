@@ -35,6 +35,28 @@ Then open http://localhost:3000 and sign in.
 | `ADMIN_PASSWORD` | `changeme`   | Teacher sign-in password. **Change this.**           |
 | `COOKIE_SECRET`  | random       | Set a fixed value so admin sessions survive restarts. |
 
+## Deploying
+
+The app needs a **persistent disk** for `data/db.json`. Point `DATA_DIR` at the
+mounted volume.
+
+**Render (one-click via blueprint):** `render.yaml` is included. Create a new
+Blueprint from this repo, then set `ADMIN_PASSWORD` in the dashboard. It
+provisions a 1 GB persistent disk mounted at `/data`.
+
+**Docker / any host:**
+
+```bash
+docker build -t gradetracker .
+docker run -p 3000:3000 \
+  -e ADMIN_PASSWORD=yourpassword \
+  -e COOKIE_SECRET=some-long-random-string \
+  -v gradetracker-data:/data \
+  gradetracker
+```
+
+The `-v` volume keeps your data across restarts and image rebuilds.
+
 ## Data
 
 All data lives in `data/db.json` (created on first run and seeded with Units 1,

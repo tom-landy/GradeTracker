@@ -5,7 +5,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { seedData } = require('./seed');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// DATA_DIR can point at a persistent disk in production (e.g. a mounted volume).
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 
 function id() {
