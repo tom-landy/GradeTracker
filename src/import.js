@@ -163,4 +163,105 @@ function parseImport(rows, tree) {
   };
 }
 
-module.exports = { parseImport, isComplete };
+// ---- Workbook (multi-tab .xlsx) parsing -------------------------------------
+
+function isCode(value) {
+  return /^[PMD]\d+$/i.test(String(value == null ? '' : value).trim());
+}
+
+// "U1 A123" -> "Unit 1", "Unit 8" -> "Unit 8". Null if no unit number found.
+function unitNameFromTab(tab) {
+  const m = String(tab || '').match(/u(?:nit)?\s*0*([0-9]+)/i);
+  return m ? 'Unit ' + m[1] : null;
+}
+
+function findHeaderRowIdx(rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const lc = rows[i].map((c) => String(c == null ? '' : c).trim().toLowerCase());
+    if (lc.includes('surname')) return i;
+    if (rows[i].filter(isCode).length >= 3) return i;
+  }
+  return -1;
+}
+
+// Turn the criterion columns into assignments: a run of adjacent criterion
+// columns is one assignment; a gap (grade/points column) starts the next.
+function groupAssignments(critCols) {
+  const groups = [];
+  let cur = null;
+  for (const cc of critCols) {
+    if (cur && cc.col === cur.lastCol + 1) {
+      cur.codes.push(cc.code);
+      cur.cols.push(cc.col);
+      cur.lastCol = cc.col;
+    } else {
+      cur = { codes: [cc.code], cols: [cc.col], lastCol: cc.col };
+      groups.push(cur);
+    }
+  }
+  return groups.map((g, i) => ({ name: 'A' + (i + 1), criteria: g.codes, cols: g.cols }));
+}
+
+// Parse criterion-level tabs from a workbook into an import payload:
+//   { units: [{ name, assignments:[{name,criteria}], students:[{name,marks}] }],
+//     skipped: [{ name, reason }] }
+function parseWorkbook(sheets) {
+  const units = [];
+  const skipped = [];
+
+  for (const sheet of sheets) {
+    const unitName = unitNameFromTab(sheet.name);
+    if (!unitName) {
+      skipped.push({ name: sheet.name, reason: 'not a unit tab' });
+      continue;
+    }
+    const rows = sheet.rows || [];
+    const h = findHeaderRowIdx(rows);
+    if (h < 0) {
+      skipped.push({ name: sheet.name, reason: 'no criteria header found' });
+      continue;
+    }
+    const header = rows[h];
+    const critCols = [];
+    for (let c = 0; c < header.length; c += 1) {
+      if (isCode(header[c])) critCols.push({ col: c, code: String(header[c]).trim().toUpperCase() });
+    }
+    if (critCols.length === 0) {
+      skipped.push({ name: sheet.name, reason: 'no per-criterion columns (summary only)' });
+      continue;
+    }
+
+    const assignments = groupAssignments(critCols);
+    const lc = header.map((c) => String(c == null ? '' : c).trim().toLowerCase());
+    const surnameCol = lc.indexOf('surname');
+    const firstCol = surnameCol > 0 ? surnameCol - 1 : -1;
+
+    const students = [];
+    for (let r = h + 1; r < rows.length; r += 1) {
+      const row = rows[r];
+      const surname = surnameCol >= 0 ? String(row[surnameCol] == null ? '' : row[surnameCol]).trim() : '';
+      const first = firstCol >= 0 ? String(row[firstCol] == null ? '' : row[firstCol]).trim() : '';
+      const name = (first + ' ' + surname).trim();
+      if (!name) continue;
+      if (normKey(name) === 'surname') continue;
+      const marks = {};
+      for (const a of assignments) {
+        for (let j = 0; j < a.cols.length; j += 1) {
+          marks[a.name + '|' + a.criteria[j]] = isComplete(row[a.cols[j]]);
+        }
+      }
+      students.push({ name, marks });
+    }
+
+    units.push({
+      name: unitName,
+      tab: sheet.name,
+      assignments: assignments.map((a) => ({ name: a.name, criteria: a.criteria })),
+      students,
+    });
+  }
+
+  return { units, skipped };
+}
+
+module.exports = { parseImport, parseWorkbook, isComplete };

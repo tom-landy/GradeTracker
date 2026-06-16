@@ -333,6 +333,95 @@ function applyImport(records) {
   return { created, updated, marksComplete, marksOutstanding };
 }
 
+// Import a parsed workbook payload. Idempotently ensures units, assignments and
+// criteria exist (matched by name/code), upserts students by name, and sets
+// progress. Saves once. payload.units[].students[].marks is { "A1|P1": bool }.
+function importWorkbook(payload) {
+  load();
+  let unitsCreated = 0;
+  let criteriaCreated = 0;
+  let marks = 0;
+  const seenStudents = new Set();
+  let studentsCreated = 0;
+
+  for (const u of payload.units) {
+    let unit = db.units.find((x) => x.name.trim().toLowerCase() === u.name.trim().toLowerCase());
+    if (!unit) {
+      unit = { id: id(), name: u.name.trim(), position: db.units.length };
+      db.units.push(unit);
+      unitsCreated += 1;
+    }
+    const keyToCid = {};
+    for (const a of u.assignments) {
+      let asg = db.assignments.find(
+        (x) => x.unitId === unit.id && x.name.trim().toLowerCase() === a.name.trim().toLowerCase()
+      );
+      if (!asg) {
+        asg = {
+          id: id(),
+          unitId: unit.id,
+          name: a.name.trim(),
+          position: db.assignments.filter((x) => x.unitId === unit.id).length,
+        };
+        db.assignments.push(asg);
+      }
+      for (const code of a.criteria) {
+        const upper = code.trim().toUpperCase();
+        let crit = db.criteria.find(
+          (x) => x.assignmentId === asg.id && x.code.toUpperCase() === upper
+        );
+        if (!crit) {
+          crit = {
+            id: id(),
+            assignmentId: asg.id,
+            code: upper,
+            position: db.criteria.filter((x) => x.assignmentId === asg.id).length,
+          };
+          db.criteria.push(crit);
+          criteriaCreated += 1;
+        }
+        keyToCid[a.name + '|' + upper] = crit.id;
+      }
+    }
+
+    for (const s of u.students) {
+      let student = getStudentByName(s.name);
+      if (!student) {
+        student = {
+          id: id(),
+          name: s.name.trim(),
+          token: studentToken(),
+          createdAt: new Date().toISOString(),
+        };
+        db.students.push(student);
+        db.progress[student.id] = {};
+        studentsCreated += 1;
+      }
+      seenStudents.add(student.id);
+      if (!db.progress[student.id]) db.progress[student.id] = {};
+      for (const key of Object.keys(s.marks)) {
+        const cid = keyToCid[key];
+        if (!cid) continue;
+        if (s.marks[key]) {
+          db.progress[student.id][cid] = true;
+          marks += 1;
+        } else {
+          delete db.progress[student.id][cid];
+        }
+      }
+    }
+  }
+
+  save();
+  return {
+    unitsCreated,
+    criteriaCreated,
+    studentsCreated,
+    studentsTouched: seenStudents.size,
+    marks,
+  };
+}
+
 function setProgress(studentId, criterionId, complete) {
   load();
   if (!db.progress[studentId]) db.progress[studentId] = {};
@@ -355,6 +444,7 @@ module.exports = {
   getStudentByToken,
   getStudentByName,
   applyImport,
+  importWorkbook,
   isComplete,
   progressSummary,
   addUnit,

@@ -79,6 +79,7 @@ textarea {
   font-size: 0.82rem;
 }
 details summary { cursor: pointer; }
+.sep { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
 .narrow-ish { max-width: 640px; }
 code { background: #eef2ff; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
 form { margin: 0; }

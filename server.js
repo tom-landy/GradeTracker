@@ -4,9 +4,13 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const store = require('./src/store');
 const csv = require('./src/csv');
-const { parseImport } = require('./src/import');
+const { parseImport, parseWorkbook } = require('./src/import');
+const { readWorkbook } = require('./src/xlsx');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Ordered list of every criterion with its CSV column label "<Unit> | <code>".
 function criterionColumns() {
@@ -179,6 +183,39 @@ app.post('/admin/import', requireAdmin, (req, res) => {
 
   const result = store.applyImport(parsed.records);
   res.render('import_result', { error: null, result, parsed });
+});
+
+// Upload a whole .xlsx workbook. Reads every criterion-level tab, builds the
+// units/criteria from the sheet, and imports student progress.
+app.post('/admin/import-xlsx', requireAdmin, upload.single('file'), (req, res) => {
+  if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'No file received. Choose an .xlsx file and try again.',
+      result: null,
+      payload: null,
+    });
+  }
+  let sheets;
+  try {
+    sheets = readWorkbook(req.file.buffer);
+  } catch (err) {
+    return res.status(400).render('import_workbook_result', {
+      error: "Couldn't read that file as an .xlsx workbook (" + err.message + ').',
+      result: null,
+      payload: null,
+    });
+  }
+  const payload = parseWorkbook(sheets);
+  if (payload.units.length === 0) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'No criterion-level tabs found. Tabs need a unit name (e.g. "Unit 8" '
+        + 'or "U1 ...") and a row with criteria codes (P1, P2, ...).',
+      result: null,
+      payload,
+    });
+  }
+  const result = store.importWorkbook(payload);
+  res.render('import_workbook_result', { error: null, result, payload });
 });
 
 // ---- Admin: units / assignments / criteria ----------------------------------

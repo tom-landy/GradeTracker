@@ -41,6 +41,21 @@
       </details>
       <div class="mt"><button type="submit" class="btn primary">Import CSV</button></div>
     </form>
+
+    <hr class="sep" />
+
+    <h3>Upload an Excel workbook (.xlsx)</h3>
+    <p class="muted small">
+      Upload your whole mark book. Every tab named for a unit (e.g.
+      <code>Unit 8</code> or <code>U1 A123</code>) with a criteria row
+      (P1, P2, …) is read; units and criteria are built from the sheet, and
+      students are matched by name across tabs. Grade/summary-only tabs are
+      skipped. <code>y</code> = complete; <code>n</code>/<code>U</code>/blank = outstanding.
+    </p>
+    <form method="post" action="/admin/import-xlsx" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".xlsx" required />
+      <div class="mt"><button type="submit" class="btn primary">Import workbook</button></div>
+    </form>
   </section>
 
   <section>

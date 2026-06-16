@@ -50,6 +50,26 @@ count as outstanding. The unit name in the title row is matched to a unit by
 prefix (`Unit 1 Exploring Business` → `Unit 1`), so the bare codes map to the
 right criteria. Upload one unit sheet at a time.
 
+## Importing a full Excel workbook (.xlsx)
+
+You can upload your whole mark book directly — no need to convert tabs to CSV.
+Under **Import / export** on the dashboard, choose **Import workbook** and pick
+the `.xlsx`. It reads every tab whose name identifies a unit (e.g. `Unit 8` or
+`U1 A123`) and that has a row of criteria codes (`P1`, `P2`, …):
+
+- **Units, assignments and criteria are built from the sheet.** Adjacent
+  criterion columns become one assignment (`A1`, `A2`, …); a grade/points column
+  between them starts the next assignment.
+- **Student names** are read as First + Surname and matched across tabs, so each
+  student's progress spans every unit.
+- `y` / `yes` / `x` / `1` counts as complete; `n` / `r` / `U` / blank counts as
+  outstanding.
+- Summary-only tabs (grades/points) and non-unit tabs are skipped and listed in
+  the result so you can see exactly what was and wasn't imported.
+
+Already-existing units/criteria are reused (matched by name/code), so
+re-uploading updates rather than duplicates.
+
 ## Running it
 
 ```bash
