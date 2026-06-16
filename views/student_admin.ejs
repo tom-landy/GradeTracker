@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Mark · ' + student.name }) %>
+<%- include('partials/head', { pageTitle: 'Mark · ' + fullName(student) }) %>
 <header class="topbar">
   <div class="container row between">
     <strong>GradeTracker</strong>
@@ -12,7 +12,7 @@
 
 <main class="container" data-student-id="<%= student.id %>">
   <p class="muted"><a href="/admin">&larr; All students</a></p>
-  <h1>Mark work — <%= student.name %></h1>
+  <h1>Mark work — <%= publicLabel(student) %></h1>
 
   <div class="row between wrap card">
     <div class="grow">
@@ -27,35 +27,60 @@
   <p class="muted">Click a criterion to toggle it between <span class="legend outstanding">outstanding</span>
     and <span class="legend complete">complete</span>. Changes save automatically.</p>
 
-  <form method="post" action="/admin/students/<%= student.id %>/rename" class="row gap wrap card">
-    <input type="text" name="name" value="<%= student.name %>" />
-    <button class="btn small">Rename</button>
-  </form>
+  <details class="card">
+    <summary class="muted small">Edit name / student number</summary>
+    <form method="post" action="/admin/students/<%= student.id %>/rename" class="mt">
+      <label>Full name (kept private — used for matching)</label>
+      <input type="text" name="name" value="<%= fullName(student) %>" />
+      <label class="mt">Student number</label>
+      <input type="text" name="studentNumber" value="<%= student.studentNumber || '' %>" />
+      <div class="mt"><button class="btn small">Save</button></div>
+    </form>
+  </details>
 
-  <% tree.forEach(function (unit) { %>
-    <section class="unit">
-      <h2><%= unit.name %></h2>
-      <% if (unit.assignments.every(function(a){ return a.criteria.length === 0; })) { %>
-        <p class="muted">No criteria yet — add them in <a href="/admin/units">Units &amp; criteria</a>.</p>
-      <% } %>
-      <div class="assignments">
-        <% unit.assignments.forEach(function (a) { %>
-          <div class="assignment">
-            <div class="assignment-name"><%= a.name %></div>
-            <div class="criteria">
-              <% a.criteria.forEach(function (c) { %>
-                <button type="button"
-                        class="crit toggle <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
-                        data-criterion-id="<%= c.id %>"
-                        data-complete="<%= c.complete ? '1' : '0' %>"
-                        title="<%= c.type %>"><%= c.code %></button>
-              <% }); %>
-              <% if (a.criteria.length === 0) { %><span class="muted small">(none)</span><% } %>
+  <% [1, 2].forEach(function (year) {
+       var yearUnits = tree.filter(function (u) { return u.year === year && !u.exam; });
+       var yearExams = examUnits.filter(function (e) { return e.year === year; });
+       if (yearUnits.length === 0 && yearExams.length === 0) return;
+  %>
+    <h2 class="year-head">Year <%= year %></h2>
+
+    <% yearExams.forEach(function (ex) { %>
+      <section class="unit exam-unit">
+        <h3><%= ex.name %> <span class="grade grade-X">Exam</span></h3>
+        <p class="muted small">All students entered &amp; sat. <%= examInfo %></p>
+      </section>
+    <% }); %>
+
+    <% yearUnits.forEach(function (unit) { %>
+      <section class="unit" data-unit-id="<%= unit.id %>">
+        <h3><%= unit.name %>
+          <% if (unit.grade && unit.grade.grade) { %>
+            <span class="grade grade-<%= unit.grade.grade %>" data-grade-for="<%= unit.id %>"><%= unit.grade.label %></span>
+          <% } %>
+        </h3>
+        <% if (unit.assignments.every(function(a){ return a.criteria.length === 0; })) { %>
+          <p class="muted">No criteria yet — add them in <a href="/admin/units">Units &amp; criteria</a>.</p>
+        <% } %>
+        <div class="assignments">
+          <% unit.assignments.forEach(function (a) { %>
+            <div class="assignment">
+              <div class="assignment-name"><%= a.name %></div>
+              <div class="criteria">
+                <% a.criteria.forEach(function (c) { %>
+                  <button type="button"
+                          class="crit toggle <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
+                          data-criterion-id="<%= c.id %>"
+                          data-complete="<%= c.complete ? '1' : '0' %>"
+                          title="<%= c.type %>"><%= c.code %></button>
+                <% }); %>
+                <% if (a.criteria.length === 0) { %><span class="muted small">(none)</span><% } %>
+              </div>
             </div>
-          </div>
-        <% }); %>
-      </div>
-    </section>
+          <% }); %>
+        </div>
+      </section>
+    <% }); %>
   <% }); %>
 
   <section class="card">

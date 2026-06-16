@@ -49,10 +49,42 @@ if (main) {
         btn.classList.toggle('complete', next);
         btn.classList.toggle('outstanding', !next);
         updateSummary(data.summary);
+        updateGrade(data.unitId, data.grade);
       })
       .catch(function () { alert('Could not save — please try again.'); })
       .finally(function () { btn.disabled = false; });
   });
+}
+
+// CSV import: read the chosen file into the textarea that actually gets posted.
+const importForm = document.querySelector('[data-import-form]');
+if (importForm) {
+  const fileInput = importForm.querySelector('#csvfile');
+  const textArea = importForm.querySelector('#csvtext');
+  if (fileInput && textArea) {
+    fileInput.addEventListener('change', function () {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () { textArea.value = String(reader.result || ''); };
+      reader.readAsText(file);
+    });
+    importForm.addEventListener('submit', function (e) {
+      if (!textArea.value.trim()) {
+        e.preventDefault();
+        alert('Choose a CSV file or paste CSV text first.');
+      }
+    });
+  }
+}
+
+function updateGrade(unitId, grade) {
+  if (!unitId || !grade) return;
+  const badge = document.querySelector('[data-grade-for="' + unitId + '"]');
+  if (!badge) return;
+  badge.className = 'grade grade-' + (grade.grade || 'U');
+  badge.setAttribute('data-grade-for', unitId);
+  badge.textContent = grade.label || '';
 }
 
 function updateSummary(summary) {

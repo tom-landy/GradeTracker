@@ -22,6 +22,35 @@
     </form>
   </section>
 
+  <section class="card">
+    <h2>Criteria codes for awkward tabs</h2>
+    <p class="muted small">
+      If a workbook tab's criteria headers aren't P/M/D codes (e.g. they're
+      numbers), set the codes here in left-to-right order. On import, they're
+      mapped to that tab's mark columns (handles criteria spread over two columns
+      each). Match the unit name to the tab, e.g. <code>Unit 8</code>.
+    </p>
+    <form method="post" action="/admin/tab-codes" class="row gap wrap">
+      <input type="text" name="unit" placeholder="Unit name e.g. Unit 8" required />
+      <input type="text" name="codes" class="grow" placeholder="P1 P2 P3 P4 P5 P6 M1 M2 M3 D1 D2 D3" required />
+      <button class="btn">Save codes</button>
+    </form>
+    <% var entries = Object.keys(tabCodes || {}); %>
+    <% if (entries.length) { %>
+      <ul class="small mt">
+        <% entries.forEach(function (u) { %>
+          <li class="row gap wrap">
+            <strong><%= u %>:</strong> <span class="muted"><%= tabCodes[u].join(' ') %></span>
+            <form method="post" action="/admin/tab-codes/delete" class="inline-del">
+              <input type="hidden" name="unit" value="<%= u %>" />
+              <button class="x" title="Remove">×</button>
+            </form>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </section>
+
   <% tree.forEach(function (unit) { %>
     <section class="card unit-edit">
       <div class="row between wrap">

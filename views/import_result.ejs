@@ -1,0 +1,50 @@
+<%- include('partials/head', { pageTitle: 'Import result' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container narrow-ish">
+  <h1>CSV import</h1>
+
+  <% if (error) { %>
+    <p class="error"><%= error %></p>
+    <% if (parsed) { %>
+      <p class="muted small">Detected header on row <%= parsed.headerRowIndex + 1 %>,
+        <%= parsed.matchedColumns %> matched column(s).</p>
+    <% } %>
+  <% } else { %>
+    <div class="card">
+      <p class="done-msg">✓ Import complete.</p>
+      <% if (parsed.detectedUnits.length) { %>
+        <p class="muted small">Recognised unit(s): <strong><%= parsed.detectedUnits.join(', ') %></strong>
+          · <%= parsed.matchedColumns %> criteria columns.</p>
+      <% } %>
+      <ul>
+        <li><strong><%= result.created %></strong> new student<%= result.created === 1 ? '' : 's' %> created</li>
+        <li><strong><%= result.updated %></strong> existing student<%= result.updated === 1 ? '' : 's' %> updated</li>
+        <li><strong><%= result.marksComplete %></strong> criteria marked complete</li>
+        <li><strong><%= result.marksOutstanding %></strong> criteria set to outstanding</li>
+      </ul>
+    </div>
+
+    <% if (parsed.unknownColumns.length) { %>
+      <div class="card outstanding-box">
+        <p><strong>Some columns weren't recognised and were ignored:</strong></p>
+        <p class="small"><%= parsed.unknownColumns.join(', ') %></p>
+        <p class="muted small">These didn't match any criterion. That's fine for
+          summary columns like <code>Unit Grade</code>. Otherwise check the unit
+          title row and criteria codes, or add the criteria in Units &amp; criteria.</p>
+      </div>
+    <% } %>
+  <% } %>
+
+  <p><a class="btn" href="/admin">← Back to students</a></p>
+</main>
+<%- include('partials/foot') %>

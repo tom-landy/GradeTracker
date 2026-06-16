@@ -9,6 +9,43 @@ const { seedData } = require('./seed');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 
+// Optional encryption at rest. Set ENCRYPTION_KEY (any passphrase) and db.json
+// is stored as AES-256-GCM ciphertext. Keep this value STABLE — losing it means
+// losing access to the data. Plaintext files still load and are re-encrypted on
+// the next save (seamless migration).
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
+let cachedKey = null;
+function encKey() {
+  if (!ENCRYPTION_KEY) return null;
+  if (!cachedKey) cachedKey = crypto.scryptSync(ENCRYPTION_KEY, 'gradetracker.enc.v1', 32);
+  return cachedKey;
+}
+
+function encrypt(plaintext, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return {
+    __enc: 'aes-256-gcm',
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    ct: ct.toString('base64'),
+  };
+}
+
+function decrypt(envelope) {
+  const key = encKey();
+  if (!key) throw new Error('data/db.json is encrypted but ENCRYPTION_KEY is not set.');
+  try {
+    const iv = Buffer.from(envelope.iv, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(envelope.ct, 'base64')), decipher.final()]).toString('utf8');
+  } catch (err) {
+    throw new Error('Could not decrypt data/db.json — ENCRYPTION_KEY is wrong or the file is corrupt.');
+  }
+}
+
 function id() {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -42,27 +79,34 @@ function emptyDb() {
 
 function load() {
   if (db) return db;
+  let raw;
   try {
-    const raw = fs.readFileSync(DB_PATH, 'utf8');
-    db = JSON.parse(raw);
-    // Make sure every collection exists even if the file is from an older version.
-    const base = emptyDb();
-    for (const key of Object.keys(base)) {
-      if (db[key] === undefined) db[key] = base[key];
-    }
+    raw = fs.readFileSync(DB_PATH, 'utf8');
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
     db = emptyDb();
     seed(db);
     save();
+    return db;
+  }
+  const parsed = JSON.parse(raw);
+  const obj = parsed && parsed.__enc ? JSON.parse(decrypt(parsed)) : parsed;
+  db = obj;
+  // Make sure every collection exists even if the file is from an older version.
+  const base = emptyDb();
+  for (const key of Object.keys(base)) {
+    if (db[key] === undefined) db[key] = base[key];
   }
   return db;
 }
 
 function save() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  const json = JSON.stringify(db, null, 2);
+  const key = encKey();
+  const out = key ? JSON.stringify(encrypt(json, key)) : json;
   const tmp = DB_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.writeFileSync(tmp, out);
   fs.renameSync(tmp, DB_PATH); // atomic-ish write so we never leave a half file
 }
 
@@ -96,6 +140,29 @@ function getSettings() {
   return load().settings;
 }
 
+// Per-unit criteria-code overrides for tabs whose headers aren't P/M/D codes
+// (e.g. numeric). { "Unit 8": ["P1","P2", ...] }
+function getTabCodes() {
+  load();
+  if (!db.settings.tabCodes) db.settings.tabCodes = {};
+  return db.settings.tabCodes;
+}
+
+function setTabCode(unitName, codesStr) {
+  load();
+  if (!db.settings.tabCodes) db.settings.tabCodes = {};
+  const codes = String(codesStr || '').split(/[\s,]+/).filter(Boolean).map((c) => c.toUpperCase());
+  const name = String(unitName || '').trim();
+  if (name && codes.length) db.settings.tabCodes[name] = codes;
+  save();
+}
+
+function deleteTabCode(unitName) {
+  load();
+  if (db.settings.tabCodes) delete db.settings.tabCodes[String(unitName || '').trim()];
+  save();
+}
+
 function unitsOrdered() {
   return [...load().units].sort((a, b) => a.position - b.position);
 }
@@ -116,10 +183,42 @@ function allCriteria() {
   return load().criteria;
 }
 
+// Year/exam grouping (by unit number).
+const YEAR1_UNITS = new Set([1, 2, 3, 4, 8, 9, 27]);
+const EXAM_UNITS = [2, 3];
+
+function unitNumber(name) {
+  const m = String(name || '').match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function unitYear(name) {
+  const n = unitNumber(name);
+  return n && YEAR1_UNITS.has(n) ? 1 : 2;
+}
+
+function unitIsExam(name) {
+  const n = unitNumber(name);
+  return n != null && EXAM_UNITS.includes(n);
+}
+
+// Exam units are shown from config (they have no criteria to track).
+function examUnits() {
+  return EXAM_UNITS.map((n) => ({ name: 'Unit ' + n, number: n, year: YEAR1_UNITS.has(n) ? 1 : 2, exam: true }));
+}
+
+function getExamInfo() {
+  load();
+  return db.settings.examInfo || 'Results available 13 August at 08:00 on the student portal.';
+}
+
 // A nested structure that mirrors the printed breakdown: unit -> assignments -> criteria.
+// Each unit is annotated with its year and whether it's an exam unit.
 function buildTree() {
   return unitsOrdered().map((unit) => ({
     ...unit,
+    year: unitYear(unit.name),
+    exam: unitIsExam(unit.name),
     assignments: assignmentsForUnit(unit.id).map((assignment) => ({
       ...assignment,
       criteria: criteriaForAssignment(assignment.id).map((c) => ({
@@ -272,6 +371,35 @@ function renameStudent(studentId, name) {
   }
 }
 
+// Update a student's display details from the admin. Re-derives first/last name
+// from the full name so the masked label stays in sync.
+function updateStudentDetails(studentId, { name, studentNumber }) {
+  load();
+  const student = db.students.find((s) => s.id === studentId);
+  if (!student) return;
+  if (typeof name === 'string' && name.trim()) {
+    const trimmed = name.trim();
+    student.name = trimmed;
+    const parts = trimmed.split(/\s+/);
+    student.firstName = parts[0] || '';
+    student.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+  }
+  if (typeof studentNumber === 'string') student.studentNumber = studentNumber.trim();
+  save();
+}
+
+// Wipe all units, assignments, criteria, students and progress (keeps settings).
+// Leaves an empty dataset so a fresh import can build everything.
+function resetAll() {
+  load();
+  db.units = [];
+  db.assignments = [];
+  db.criteria = [];
+  db.students = [];
+  db.progress = {};
+  save();
+}
+
 function regenerateToken(studentId) {
   load();
   const student = db.students.find((s) => s.id === studentId);
@@ -289,6 +417,271 @@ function deleteStudent(studentId) {
   save();
 }
 
+function getStudentByName(name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  return load().students.find((s) => (s.name || '').trim().toLowerCase() === wanted) || null;
+}
+
+// ---- Display helpers (GDPR-friendly) ----------------------------------------
+
+function fullName(s) {
+  const n = (s.name || '').trim();
+  if (n) return n;
+  return `${s.firstName || ''} ${s.lastName || ''}`.trim();
+}
+
+function firstNameOf(s) {
+  if (s.firstName) return s.firstName.trim();
+  const parts = fullName(s).split(/\s+/);
+  return parts[0] || '';
+}
+
+function lastInitialOf(s) {
+  if (s.lastName) return s.lastName.trim().charAt(0).toUpperCase();
+  const parts = fullName(s).split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() : '';
+}
+
+// BTEC unit grade from a list of criteria ({ code, complete }).
+// Standard cumulative ladder: Pass = all P done; Merit = all P + all M;
+// Distinction = all P + all M + all D. Otherwise "Working towards".
+function gradeForCriteria(criteria) {
+  if (!criteria || !criteria.length) return { grade: '', label: '' };
+  const band = { P: [], M: [], D: [] };
+  for (const c of criteria) {
+    const t = String(c.code || '').charAt(0).toUpperCase();
+    if (band[t]) band[t].push(!!c.complete);
+  }
+  const allDone = (arr) => arr.length > 0 && arr.every(Boolean);
+  const pAll = allDone(band.P);
+  const mAll = allDone(band.M);
+  const dAll = allDone(band.D);
+  let grade = 'U';
+  if (pAll && mAll && dAll) grade = 'D';
+  else if (pAll && mAll) grade = 'M';
+  else if (pAll) grade = 'P';
+  const labels = { U: 'Working towards', P: 'Pass', M: 'Merit', D: 'Distinction' };
+  return { grade, label: labels[grade] };
+}
+
+// What students see on their shared page: "SC243208 · Alex A." (no surname).
+function publicLabel(s) {
+  const number = (s.studentNumber || '').trim();
+  const li = lastInitialOf(s);
+  const namePart = [firstNameOf(s), li ? li + '.' : ''].filter(Boolean).join(' ');
+  return [number, namePart].filter(Boolean).join(' · ') || 'Student';
+}
+
+// Bulk upsert from a CSV import. Each record:
+//   { name, complete: [criterionId...], outstanding: [criterionId...] }
+// Students are matched by name (case-insensitive) or created. Only the criteria
+// listed in a record are touched; everything else is left as-is. Saves once.
+function applyImport(records) {
+  load();
+  let created = 0;
+  let updated = 0;
+  let marksComplete = 0;
+  let marksOutstanding = 0;
+  for (const rec of records) {
+    let student = getStudentByName(rec.name);
+    if (!student) {
+      student = {
+        id: id(),
+        name: rec.name.trim(),
+        token: studentToken(),
+        createdAt: new Date().toISOString(),
+      };
+      db.students.push(student);
+      db.progress[student.id] = {};
+      created += 1;
+    } else {
+      updated += 1;
+    }
+    if (!db.progress[student.id]) db.progress[student.id] = {};
+    for (const cid of rec.complete) {
+      db.progress[student.id][cid] = true;
+      marksComplete += 1;
+    }
+    for (const cid of rec.outstanding) {
+      delete db.progress[student.id][cid];
+      marksOutstanding += 1;
+    }
+  }
+  save();
+  return { created, updated, marksComplete, marksOutstanding };
+}
+
+// Import a parsed workbook payload. Idempotently ensures units/assignments/
+// criteria exist; maps each criterion by CODE so an existing unit keeps its
+// assignment structure (new codes go under the payload's assignment). Students
+// are matched by student number first, then full name; numbers/names back-fill.
+// Saves once. payload.units[].students[].marks is { CODE: bool }.
+function importWorkbook(payload) {
+  load();
+  let unitsCreated = 0;
+  let criteriaCreated = 0;
+  let marks = 0;
+  const seenStudents = new Set();
+  let studentsCreated = 0;
+  let unmatchedRows = 0;
+
+  // Phase 1: ensure units/assignments/criteria, and remember each unit's
+  // code -> criterionId map alongside that tab's student rows.
+  const contexts = [];
+  for (const u of payload.units) {
+    let unit = db.units.find((x) => x.name.trim().toLowerCase() === u.name.trim().toLowerCase());
+    if (!unit) {
+      unit = { id: id(), name: u.name.trim(), position: db.units.length };
+      db.units.push(unit);
+      unitsCreated += 1;
+    }
+
+    const codeToCid = {};
+    for (const a of db.assignments.filter((x) => x.unitId === unit.id)) {
+      for (const c of db.criteria.filter((x) => x.assignmentId === a.id)) {
+        const up = c.code.toUpperCase();
+        if (!(up in codeToCid)) codeToCid[up] = c.id;
+      }
+    }
+
+    const codeAssignment = {};
+    for (const a of u.assignments) for (const code of a.criteria) codeAssignment[code.toUpperCase()] = a.name;
+
+    const ensureAssignment = (name) => {
+      let asg = db.assignments.find(
+        (x) => x.unitId === unit.id && x.name.trim().toLowerCase() === name.trim().toLowerCase()
+      );
+      if (!asg) {
+        asg = {
+          id: id(),
+          unitId: unit.id,
+          name: name.trim(),
+          position: db.assignments.filter((x) => x.unitId === unit.id).length,
+        };
+        db.assignments.push(asg);
+      }
+      return asg;
+    };
+
+    for (const code of u.assignments.flatMap((a) => a.criteria)) {
+      const up = code.toUpperCase();
+      if (codeToCid[up]) continue;
+      const asg = ensureAssignment(codeAssignment[up] || 'A1');
+      const crit = {
+        id: id(),
+        assignmentId: asg.id,
+        code: up,
+        position: db.criteria.filter((x) => x.assignmentId === asg.id).length,
+      };
+      db.criteria.push(crit);
+      criteriaCreated += 1;
+      codeToCid[up] = crit.id;
+    }
+
+    contexts.push({ codeToCid, students: u.students });
+  }
+
+  const applyMarks = (student, marksObj, codeToCid) => {
+    seenStudents.add(student.id);
+    if (!db.progress[student.id]) db.progress[student.id] = {};
+    for (const code of Object.keys(marksObj)) {
+      const cid = codeToCid[code.toUpperCase()];
+      if (!cid) continue;
+      if (marksObj[code]) {
+        db.progress[student.id][cid] = true;
+        marks += 1;
+      } else {
+        delete db.progress[student.id][cid];
+      }
+    }
+  };
+
+  // Phase 2: only rows WITH a verified student number create/update a student.
+  for (const ctx of contexts) {
+    for (const s of ctx.students) {
+      if (!s.studentNumber) continue;
+      let student = db.students.find((x) => x.studentNumber && x.studentNumber === s.studentNumber)
+        || getStudentByName(s.name);
+      if (!student) {
+        student = {
+          id: id(),
+          studentNumber: s.studentNumber,
+          firstName: s.firstName || '',
+          lastName: s.lastName || '',
+          name: s.name.trim(),
+          token: studentToken(),
+          createdAt: new Date().toISOString(),
+        };
+        db.students.push(student);
+        db.progress[student.id] = {};
+        studentsCreated += 1;
+      } else {
+        if (!student.studentNumber) student.studentNumber = s.studentNumber;
+        if (s.firstName && !student.firstName) student.firstName = s.firstName;
+        if (s.lastName && !student.lastName) student.lastName = s.lastName;
+        if (!student.name) student.name = s.name.trim();
+      }
+      applyMarks(student, s.marks, ctx.codeToCid);
+    }
+  }
+
+  // Phase 3: rows WITHOUT a number only attach progress to an already-numbered
+  // student matched by name. They never create a new (unverified) student.
+  for (const ctx of contexts) {
+    for (const s of ctx.students) {
+      if (s.studentNumber) continue;
+      const student = getStudentByName(s.name);
+      if (student && student.studentNumber) applyMarks(student, s.marks, ctx.codeToCid);
+      else unmatchedRows += 1;
+    }
+  }
+
+  // Phase 4: enforce "no number, not on the system" — drop unverified students.
+  const removedUnverified = removeStudentsWithoutNumber();
+
+  save();
+  return {
+    unitsCreated,
+    criteriaCreated,
+    studentsCreated,
+    studentsTouched: seenStudents.size,
+    marks,
+    unmatchedRows,
+    removedUnverified,
+  };
+}
+
+// Remove every student that has no verified student number (and their progress).
+function removeStudentsWithoutNumber() {
+  load();
+  const keep = db.students.filter((s) => s.studentNumber && String(s.studentNumber).trim());
+  const removed = db.students.length - keep.length;
+  for (const s of db.students) {
+    if (!(s.studentNumber && String(s.studentNumber).trim())) delete db.progress[s.id];
+  }
+  db.students = keep;
+  if (removed) save();
+  return removed;
+}
+
+function unitIdForCriterion(criterionId) {
+  load();
+  const c = db.criteria.find((x) => x.id === criterionId);
+  if (!c) return null;
+  const a = db.assignments.find((x) => x.id === c.assignmentId);
+  return a ? a.unitId : null;
+}
+
+function gradeForUnit(studentId, unitId) {
+  const crit = [];
+  for (const a of assignmentsForUnit(unitId)) {
+    for (const c of criteriaForAssignment(a.id)) {
+      crit.push({ code: c.code, complete: isComplete(studentId, c.id) });
+    }
+  }
+  return gradeForCriteria(crit);
+}
+
 function setProgress(studentId, criterionId, complete) {
   load();
   if (!db.progress[studentId]) db.progress[studentId] = {};
@@ -303,13 +696,29 @@ function setProgress(studentId, criterionId, complete) {
 module.exports = {
   criterionType,
   getSettings,
+  examUnits,
+  getExamInfo,
+  unitYear,
+  unitIsExam,
+  getTabCodes,
+  setTabCode,
+  deleteTabCode,
   buildTree,
   unitsOrdered,
   allCriteria,
   studentsOrdered,
   getStudent,
   getStudentByToken,
+  getStudentByName,
+  fullName,
+  publicLabel,
+  applyImport,
+  importWorkbook,
+  removeStudentsWithoutNumber,
   isComplete,
+  gradeForCriteria,
+  gradeForUnit,
+  unitIdForCriterion,
   progressSummary,
   addUnit,
   renameUnit,
@@ -321,6 +730,8 @@ module.exports = {
   deleteCriterion,
   addStudent,
   renameStudent,
+  updateStudentDetails,
+  resetAll,
   regenerateToken,
   deleteStudent,
   setProgress,

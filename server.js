@@ -4,7 +4,27 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const store = require('./src/store');
+const csv = require('./src/csv');
+const { parseImport, parseWorkbook } = require('./src/import');
+const { readWorkbook } = require('./src/xlsx');
+const sync = require('./src/sync');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+
+// Ordered list of every criterion with its CSV column label "<Unit> | <code>".
+function criterionColumns() {
+  const cols = [];
+  for (const unit of store.buildTree()) {
+    for (const assignment of unit.assignments) {
+      for (const c of assignment.criteria) {
+        cols.push({ id: c.id, label: `${unit.name} | ${c.code}` });
+      }
+    }
+  }
+  return cols;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +33,7 @@ const COOKIE_SECRET = process.env.COOKIE_SECRET || crypto.randomBytes(16).toStri
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '5mb' }));
 app.use(express.json());
 app.use(cookieParser(COOKIE_SECRET));
 app.use('/static', express.static(path.join(__dirname, 'public')));
@@ -22,6 +42,10 @@ app.use('/static', express.static(path.join(__dirname, 'public')));
 app.use((req, res, next) => {
   res.locals.baseUrl = `${req.protocol}://${req.get('host')}`;
   res.locals.title = store.getSettings().title;
+  res.locals.publicLabel = store.publicLabel;
+  res.locals.fullName = store.fullName;
+  res.locals.examUnits = store.examUnits();
+  res.locals.examInfo = store.getExamInfo();
   next();
 });
 
@@ -74,7 +98,14 @@ app.get('/admin', requireAdmin, (req, res) => {
   }));
   const tree = store.buildTree();
   const totalCriteria = store.allCriteria().length;
-  res.render('dashboard', { students, tree, totalCriteria });
+  res.render('dashboard', {
+    students,
+    tree,
+    totalCriteria,
+    unverifiedCount: students.filter((s) => !(s.studentNumber && String(s.studentNumber).trim())).length,
+    syncConfigured: sync.isConfigured(),
+    syncSource: sync.sourceLabel(),
+  });
 });
 
 // ---- Admin: students --------------------------------------------------------
@@ -86,9 +117,23 @@ app.post('/admin/students', requireAdmin, (req, res) => {
 });
 
 app.post('/admin/students/:id/rename', requireAdmin, (req, res) => {
-  const name = (req.body.name || '').trim();
-  if (name) store.renameStudent(req.params.id, name);
+  store.updateStudentDetails(req.params.id, {
+    name: req.body.name,
+    studentNumber: req.body.studentNumber,
+  });
   res.redirect('/admin/students/' + req.params.id);
+});
+
+// Remove students with no verified student number (and any "Withdrawn").
+app.post('/admin/remove-unverified', requireAdmin, (req, res) => {
+  store.removeStudentsWithoutNumber();
+  res.redirect('/admin');
+});
+
+// Danger zone: wipe everything so the teacher can re-import from scratch.
+app.post('/admin/reset', requireAdmin, (req, res) => {
+  if ((req.body.confirm || '').trim().toUpperCase() === 'DELETE') store.resetAll();
+  res.redirect('/admin');
 });
 
 app.post('/admin/students/:id/regenerate', requireAdmin, (req, res) => {
@@ -104,13 +149,14 @@ app.post('/admin/students/:id/delete', requireAdmin, (req, res) => {
 app.get('/admin/students/:id', requireAdmin, (req, res) => {
   const student = store.getStudent(req.params.id);
   if (!student) return res.status(404).render('notfound');
-  const tree = store.buildTree().map((unit) => ({
-    ...unit,
-    assignments: unit.assignments.map((a) => ({
+  const tree = store.buildTree().map((unit) => {
+    const assignments = unit.assignments.map((a) => ({
       ...a,
       criteria: a.criteria.map((c) => ({ ...c, complete: store.isComplete(student.id, c.id) })),
-    })),
-  }));
+    }));
+    const grade = store.gradeForCriteria(assignments.flatMap((a) => a.criteria));
+    return { ...unit, assignments, grade };
+  });
   res.render('student_admin', {
     student,
     tree,
@@ -123,13 +169,130 @@ app.post('/admin/progress', requireAdmin, (req, res) => {
   const { studentId, criterionId, complete } = req.body;
   if (!studentId || !criterionId) return res.status(400).json({ ok: false });
   store.setProgress(studentId, criterionId, !!complete);
-  res.json({ ok: true, summary: store.progressSummary(studentId) });
+  const unitId = store.unitIdForCriterion(criterionId);
+  const grade = unitId ? store.gradeForUnit(studentId, unitId) : null;
+  res.json({ ok: true, summary: store.progressSummary(studentId), unitId, grade });
+});
+
+// ---- Admin: CSV export / import ---------------------------------------------
+
+// Download the current data as CSV. This file IS the import template: edit it
+// (mark cells x / blank) and upload it back. Doubles as a simple backup.
+app.get('/admin/export.csv', requireAdmin, (req, res) => {
+  const cols = criterionColumns();
+  const rows = [['Student', ...cols.map((c) => c.label)]];
+  for (const s of store.studentsOrdered()) {
+    rows.push([s.name, ...cols.map((c) => (store.isComplete(s.id, c.id) ? 'x' : ''))]);
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="gradetracker.csv"');
+  res.send(csv.stringify(rows));
+});
+
+app.post('/admin/import', requireAdmin, (req, res) => {
+  const rows = csv.parse(req.body.csv || '');
+  if (rows.length < 2) {
+    return res.status(400).render('import_result', {
+      error: 'No data found. The file needs a header row plus at least one student row.',
+      result: null,
+      parsed: null,
+    });
+  }
+
+  const parsed = parseImport(rows, store.buildTree());
+  if (parsed.matchedColumns === 0) {
+    return res.status(400).render('import_result', {
+      error: "Couldn't match any criteria columns. Check the sheet has a 'Students' "
+        + 'header row with criteria codes (e.g. P1, P2) and a unit title above it, '
+        + 'or use the downloaded template.',
+      result: null,
+      parsed,
+    });
+  }
+
+  const result = store.applyImport(parsed.records);
+  res.render('import_result', { error: null, result, parsed });
+});
+
+// Upload a whole .xlsx workbook. Reads every criterion-level tab, builds the
+// units/criteria from the sheet, and imports student progress.
+app.post('/admin/import-xlsx', requireAdmin, upload.single('file'), (req, res) => {
+  if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'No file received. Choose an .xlsx file and try again.',
+      result: null,
+      payload: null,
+    });
+  }
+  let sheets;
+  try {
+    sheets = readWorkbook(req.file.buffer);
+  } catch (err) {
+    return res.status(400).render('import_workbook_result', {
+      error: "Couldn't read that file as an .xlsx workbook (" + err.message + ').',
+      result: null,
+      payload: null,
+    });
+  }
+  const payload = parseWorkbook(sheets, { overrides: store.getTabCodes() });
+  if (payload.units.length === 0) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'No criterion-level tabs found. Tabs need a unit name (e.g. "Unit 8" '
+        + 'or "U1 ...") and a row with criteria codes (P1, P2, ...).',
+      result: null,
+      payload,
+    });
+  }
+  const result = store.importWorkbook(payload);
+  res.render('import_workbook_result', { error: null, result, payload });
+});
+
+// Pull the latest workbook from the configured cloud source and re-import it.
+app.post('/admin/sync', requireAdmin, async (req, res) => {
+  if (!sync.isConfigured()) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'Cloud sync is not configured yet. See the "Cloud sync" section of the README to set it up.',
+      result: null,
+      payload: null,
+    });
+  }
+  try {
+    const buffer = await sync.fetchWorkbook();
+    const sheets = readWorkbook(buffer);
+    const payload = parseWorkbook(sheets, { overrides: store.getTabCodes() });
+    if (payload.units.length === 0) {
+      return res.status(400).render('import_workbook_result', {
+        error: 'Synced the file, but found no criterion-level tabs to import.',
+        result: null,
+        payload,
+      });
+    }
+    const result = store.importWorkbook(payload);
+    res.render('import_workbook_result', { error: null, result, payload });
+  } catch (err) {
+    res.status(502).render('import_workbook_result', {
+      error: 'Sync failed: ' + err.message,
+      result: null,
+      payload: null,
+    });
+  }
 });
 
 // ---- Admin: units / assignments / criteria ----------------------------------
 
 app.get('/admin/units', requireAdmin, (req, res) => {
-  res.render('units_admin', { tree: store.buildTree() });
+  res.render('units_admin', { tree: store.buildTree(), tabCodes: store.getTabCodes() });
+});
+
+// Criteria-code override for a tab whose headers aren't P/M/D codes.
+app.post('/admin/tab-codes', requireAdmin, (req, res) => {
+  store.setTabCode(req.body.unit, req.body.codes);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/tab-codes/delete', requireAdmin, (req, res) => {
+  store.deleteTabCode(req.body.unit);
+  res.redirect('/admin/units');
 });
 
 app.post('/admin/units', requireAdmin, (req, res) => {
@@ -192,7 +355,8 @@ app.get('/s/:token', (req, res) => {
       return { ...a, criteria, outstanding };
     });
     const unitOutstanding = assignments.flatMap((a) => a.outstanding);
-    return { ...unit, assignments, unitOutstanding };
+    const grade = store.gradeForCriteria(assignments.flatMap((a) => a.criteria));
+    return { ...unit, assignments, unitOutstanding, grade };
   });
 
   res.render('student_view', {
@@ -209,4 +373,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`GradeTracker running on http://localhost:${PORT}`);
   console.log(`Admin password: ${ADMIN_PASSWORD === 'changeme' ? "'changeme' (set ADMIN_PASSWORD to change)" : '(set via ADMIN_PASSWORD)'}`);
+  console.log(`Data at rest: ${process.env.ENCRYPTION_KEY ? 'encrypted (AES-256-GCM)' : 'NOT encrypted (set ENCRYPTION_KEY to enable)'}`);
 });

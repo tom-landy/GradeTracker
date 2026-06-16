@@ -69,6 +69,47 @@ input[type="text"], input[type="password"] {
   min-width: 0;
 }
 .narrow-input { width: 5rem; }
+textarea {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+details summary { cursor: pointer; }
+.sep { border: none; border-top: 1px solid var(--line); margin: 1rem 0; }
+.danger-zone { border-color: #fca5a5; margin-top: 2rem; }
+.danger-zone h2 { color: var(--out); }
+
+.grade {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+}
+.grade-U { background: #f1f5f9; color: #64748b; }
+.grade-P { background: #dbeafe; color: #1e40af; }
+.grade-M { background: #fef3c7; color: #92400e; }
+.grade-D { background: #ede9fe; color: #6d28d9; }
+.grade-X { background: #ccfbf1; color: #0f766e; }
+
+.year-head {
+  margin: 1.75rem 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid var(--ink);
+  font-size: 1.35rem;
+}
+.exam-unit { background: #f0fdfa; border-left: 4px solid #0f766e; padding-left: 0.75rem; }
+.exam-msg { margin: 0.3rem 0 0; }
+.narrow-ish { max-width: 640px; }
+code { background: #eef2ff; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
 form { margin: 0; }
 label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 .narrow form label + input { width: 100%; }

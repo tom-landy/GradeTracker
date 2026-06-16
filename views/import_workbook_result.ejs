@@ -1,0 +1,71 @@
+<%- include('partials/head', { pageTitle: 'Workbook import' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container narrow-ish">
+  <h1>Excel workbook import</h1>
+
+  <% if (error) { %>
+    <p class="error"><%= error %></p>
+  <% } else { %>
+    <div class="card">
+      <p class="done-msg">✓ Import complete.</p>
+      <ul>
+        <li><strong><%= result.unitsCreated %></strong> new unit<%= result.unitsCreated === 1 ? '' : 's' %> created</li>
+        <li><strong><%= result.criteriaCreated %></strong> new criteria created</li>
+        <li><strong><%= result.studentsCreated %></strong> new student<%= result.studentsCreated === 1 ? '' : 's' %> created
+          (<%= result.studentsTouched %> updated in total)</li>
+        <li><strong><%= result.marks %></strong> criteria marked complete</li>
+        <% if (result.removedUnverified) { %>
+          <li><strong><%= result.removedUnverified %></strong> unverified student(s) without a number removed</li>
+        <% } %>
+        <% if (result.unmatchedRows) { %>
+          <li class="muted"><%= result.unmatchedRows %> numberless row(s) skipped (no matching numbered student)</li>
+        <% } %>
+      </ul>
+    </div>
+
+    <h2>Tabs imported</h2>
+    <% payload.units.forEach(function (u) { %>
+      <div class="card">
+        <strong><%= u.name %></strong> <span class="muted small">(from tab “<%= u.tab %>”, <%= u.students.length %> students)</span>
+        <% if (u.inferredCodes && u.inferredCodes.length) { %>
+          <span class="muted small"> · inferred missing header(s): <%= u.inferredCodes.join(', ') %></span>
+        <% } %>
+        <% if (u.skippedRows) { %>
+          <span class="muted small"> · <%= u.skippedRows %> row(s) skipped (no first name)</span>
+        <% } %>
+        <div class="assignments mt">
+          <% u.assignments.forEach(function (a) { %>
+            <div class="assignment">
+              <div class="assignment-name"><%= a.name %></div>
+              <div class="criteria">
+                <% a.criteria.forEach(function (code) { %><span class="crit type-<%= code.charAt(0) %>"><%= code %></span><% }); %>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+  <% if (payload && payload.skipped && payload.skipped.length) { %>
+    <div class="card">
+      <p class="muted"><strong>Skipped tabs:</strong></p>
+      <ul class="small muted">
+        <% payload.skipped.forEach(function (s) { %><li><%= s.name %> — <%= s.reason %></li><% }); %>
+      </ul>
+    </div>
+  <% } %>
+
+  <p><a class="btn" href="/admin">← Back to students</a></p>
+</main>
+<%- include('partials/foot') %>

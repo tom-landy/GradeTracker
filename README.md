@@ -18,6 +18,151 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Years & exam units
+
+Units are grouped into **Year 1** (Units 1, 2, 3, 4, 8, 9, 27) and **Year 2**
+(everything else) on the student page and the admin marking grid. **Units 2 & 3
+are exam units**: instead of criteria they show an exam card noting all students
+are entered and have sat the exam, with the results-release message (default:
+"Results available 13 August at 08:00 on the student portal"). The year/exam
+lists are defined in `src/store.js` (`YEAR1_UNITS`, `EXAM_UNITS`) and the message
+in `settings.examInfo`.
+
+## Unit grades (Pass / Merit / Distinction)
+
+Each unit shows a calculated grade badge on both the student page and the admin
+marking grid, using the standard cumulative BTEC ladder:
+
+- **Pass** — all P criteria complete
+- **Merit** — all P **and** all M criteria complete
+- **Distinction** — all P, M **and** D criteria complete
+- otherwise **Working towards**
+
+On the marking grid the badge updates live as you tick criteria.
+
+## Importing students & progress (CSV)
+
+From the admin dashboard you can bulk-load students and their progress:
+
+1. Click **Download CSV (template & backup)**. The file has one column per
+   criterion, headed `Unit 1 | P1`, `Unit 1 | P2`, …, and a row per existing
+   student.
+2. In a spreadsheet, add a row per student (first column = name) and put an
+   **x** in each criterion they've completed (blank = outstanding). Accepted
+   "complete" values: `x`, `yes`, `1`, `done`, `✓`.
+3. Back in the admin, upload the file (or paste the CSV) under **Import / export**.
+
+Students are matched by name (case-insensitive) or created automatically. Only
+the criteria included as columns are changed. Unrecognised columns are ignored
+and reported. The same CSV download also works as a simple backup.
+
+### It also reads existing tracking sheets
+
+You don't have to use the template. The importer auto-detects a typical teacher
+tracking sheet:
+
+- a **unit title** row (e.g. `Unit 1 Exploring Business`),
+- an assignment row (`A1`, `A2`, …),
+- a **`Students`** row of bare criteria codes (`P1`, `P2`, … `D4`),
+- student rows with `y`/`n` cells, plus trailing summary columns
+  (`Unit Grade`, `Unit Points`) which are ignored.
+
+`y` / `yes` / `x` / `1` / `done` / `✓` count as complete; `n` / `r` / blank
+count as outstanding. The unit name in the title row is matched to a unit by
+prefix (`Unit 1 Exploring Business` → `Unit 1`), so the bare codes map to the
+right criteria. Upload one unit sheet at a time.
+
+## Importing a full Excel workbook (.xlsx)
+
+You can upload your whole mark book directly — no need to convert tabs to CSV.
+Under **Import / export** on the dashboard, choose **Import workbook** and pick
+the `.xlsx`. It reads every tab whose name identifies a unit (e.g. `Unit 8` or
+`U1 A123`) and that has a row of criteria codes (`P1`, `P2`, …):
+
+- **Units, assignments and criteria are built from the sheet.** Adjacent
+  criterion columns become one assignment (`A1`, `A2`, …); a grade/points column
+  between them starts the next assignment.
+- **Student names** are read as First + Surname and matched across tabs, so each
+  student's progress spans every unit.
+- `y` / `yes` / `x` / `1` counts as complete; `n` / `r` / `U` / blank counts as
+  outstanding.
+- Summary-only tabs (grades/points) and non-unit tabs are skipped and listed in
+  the result so you can see exactly what was and wasn't imported.
+
+Already-existing units/criteria are reused (matched by name/code), so
+re-uploading updates rather than duplicates.
+
+### Student numbers & GDPR-friendly display
+
+If a tab has a **Student No.** column (e.g. `SC243208`), it's captured and used
+to match students across tabs (falling back to name). Students are shown as
+**`StudentNo · First L.`** — first name plus last initial only, never the full
+surname — **everywhere, including the teacher admin**. Full names are stored
+(used for matching) but only revealed when you expand "Edit name / student
+number" on a student. You can also clear everything via **Danger zone → Clear
+all data** on the dashboard to re-import from scratch.
+
+The importer copes with common sheet quirks: names split into First/Surname
+columns (in either header position), a blank/offset **P1** header (inferred from
+the next code), and `Withdrawn` in the number column (ignored). For safety it
+**validates that name columns actually contain names** and **skips tabs/rows it
+can't parse cleanly** (e.g. numeric criteria headers, summary-only tabs,
+misaligned rows) rather than inventing records — everything skipped is reported
+after import.
+
+## Cloud sync (OneDrive / SharePoint) — "Sync now" button
+
+When configured, the dashboard shows a **Sync now** button that pulls the latest
+workbook from the cloud and re-imports it (idempotent — matches existing
+students/units, no duplicates). Configure via environment variables, either:
+
+**Option A — direct download URL (simplest, no Azure):**
+
+```
+SYNC_XLSX_URL=https://…   # a link that returns the .xlsx bytes
+```
+
+Use this if your file has a shareable "Anyone with the link" download URL.
+
+**Option B — Microsoft Graph (for org-protected files):**
+
+```
+GRAPH_TENANT_ID=…
+GRAPH_CLIENT_ID=…
+GRAPH_CLIENT_SECRET=…
+# then EITHER the file's share/web link:
+GRAPH_FILE_URL=https://yourschool.sharepoint.com/…/Mark_Book.xlsx
+# OR the drive + item ids:
+GRAPH_DRIVE_ID=…
+GRAPH_ITEM_ID=…
+```
+
+Setup for Option B (your IT / Azure admin does this once):
+
+1. In **Azure Portal → App registrations**, create an app; note the
+   **Directory (tenant) ID** and **Application (client) ID**.
+2. **Certificates & secrets → New client secret**; copy the value.
+3. **API permissions → Microsoft Graph → Application permissions →
+   `Files.Read.All`** (or `Sites.Read.All`), then **Grant admin consent**.
+4. Put the workbook in OneDrive/SharePoint and set `GRAPH_FILE_URL` to its link.
+
+The host must allow outbound HTTPS to `login.microsoftonline.com` and
+`graph.microsoft.com`. (A scheduled auto-pull or push-on-save can be added later
+on top of this.)
+
+## Security
+
+- **Encryption at rest:** set `ENCRYPTION_KEY` (any passphrase) and `db.json` is
+  stored as **AES-256-GCM** ciphertext (names, student numbers and grades are not
+  readable from the raw file). Keep the key **stable and backed up** — losing it
+  means losing the data. Existing plaintext files load fine and are re-encrypted
+  on the next save. On Render the blueprint generates a stable key automatically.
+- **Uploaded spreadsheets are never stored** — they're parsed in memory and
+  discarded; only the extracted fields are saved.
+- Admin area is password-protected (`ADMIN_PASSWORD`) with a signed, httpOnly
+  session cookie. Student links use unguessable 96-bit tokens and are read-only.
+- Names are masked to `StudentNo · First L.` everywhere on screen.
+
 ## Running it
 
 ```bash
