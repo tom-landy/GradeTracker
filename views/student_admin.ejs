@@ -12,8 +12,7 @@
 
 <main class="container" data-student-id="<%= student.id %>">
   <p class="muted"><a href="/admin">&larr; All students</a></p>
-  <h1>Mark work — <%= fullName(student) %><% if (student.studentNumber) { %> <span class="muted">(<%= student.studentNumber %>)</span><% } %></h1>
-  <p class="muted small">Students see this as: <strong><%= publicLabel(student) %></strong> (no surname).</p>
+  <h1>Mark work — <%= publicLabel(student) %></h1>
 
   <div class="row between wrap card">
     <div class="grow">
@@ -28,10 +27,16 @@
   <p class="muted">Click a criterion to toggle it between <span class="legend outstanding">outstanding</span>
     and <span class="legend complete">complete</span>. Changes save automatically.</p>
 
-  <form method="post" action="/admin/students/<%= student.id %>/rename" class="row gap wrap card">
-    <input type="text" name="name" value="<%= student.name %>" />
-    <button class="btn small">Rename</button>
-  </form>
+  <details class="card">
+    <summary class="muted small">Edit name / student number</summary>
+    <form method="post" action="/admin/students/<%= student.id %>/rename" class="mt">
+      <label>Full name (kept private — used for matching)</label>
+      <input type="text" name="name" value="<%= fullName(student) %>" />
+      <label class="mt">Student number</label>
+      <input type="text" name="studentNumber" value="<%= student.studentNumber || '' %>" />
+      <div class="mt"><button class="btn small">Save</button></div>
+    </form>
+  </details>
 
   <% tree.forEach(function (unit) { %>
     <section class="unit">

@@ -272,6 +272,35 @@ function renameStudent(studentId, name) {
   }
 }
 
+// Update a student's display details from the admin. Re-derives first/last name
+// from the full name so the masked label stays in sync.
+function updateStudentDetails(studentId, { name, studentNumber }) {
+  load();
+  const student = db.students.find((s) => s.id === studentId);
+  if (!student) return;
+  if (typeof name === 'string' && name.trim()) {
+    const trimmed = name.trim();
+    student.name = trimmed;
+    const parts = trimmed.split(/\s+/);
+    student.firstName = parts[0] || '';
+    student.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+  }
+  if (typeof studentNumber === 'string') student.studentNumber = studentNumber.trim();
+  save();
+}
+
+// Wipe all units, assignments, criteria, students and progress (keeps settings).
+// Leaves an empty dataset so a fresh import can build everything.
+function resetAll() {
+  load();
+  db.units = [];
+  db.assignments = [];
+  db.criteria = [];
+  db.students = [];
+  db.progress = {};
+  save();
+}
+
 function regenerateToken(studentId) {
   load();
   const student = db.students.find((s) => s.id === studentId);
@@ -515,6 +544,8 @@ module.exports = {
   deleteCriterion,
   addStudent,
   renameStudent,
+  updateStudentDetails,
+  resetAll,
   regenerateToken,
   deleteStudent,
   setProgress,

@@ -216,26 +216,66 @@ function columnLooksLikeIds(rows, h, c) {
   return total > 0 && ids / total >= 0.5;
 }
 
-// Locate the student-number, first-name and surname columns from the header,
-// with sensible fallbacks for sheets that only label "Students".
+const MARK_VALUES = new Set(['y', 'n', 'r', 'u']);
+
+function valueIsName(v) {
+  return /[A-Za-z]{2,}/.test(v) && !MARK_VALUES.has(v.toLowerCase()) && !/^\d+$/.test(v);
+}
+
+// Does a column hold actual names (not marks/numbers/blanks)?
+function columnIsNames(rows, h, c) {
+  if (c < 0) return false;
+  let names = 0;
+  let total = 0;
+  for (let r = h + 1; r < rows.length; r += 1) {
+    const v = cell(rows, r, c);
+    if (!v) continue;
+    total += 1;
+    if (valueIsName(v)) names += 1;
+  }
+  return total > 0 && names / total >= 0.5;
+}
+
+// Locate the student-number, first-name and surname columns. Returns null if the
+// name columns can't be identified reliably, so the tab is skipped rather than
+// producing garbage records from inconsistent layouts.
 function locateNameColumns(rows, h) {
   const header = rows[h];
   let numberCol = -1;
-  let firstCol = -1;
-  let surnameCol = -1;
+  let firstHdr = -1;
+  let surnameHdr = -1;
   header.forEach((raw, c) => {
     const k = String(raw == null ? '' : raw).trim().toLowerCase();
     if (numberCol < 0 && (/(student|candidate).*(no\b|no\.|number)/.test(k) || /^(uln|reg\.?\s*no)/.test(k))) numberCol = c;
-    if (firstCol < 0 && /^(students?|first\s*name|forename|name)$/.test(k)) firstCol = c;
-    if (surnameCol < 0 && /^(surname|last\s*name|family\s*name)$/.test(k)) surnameCol = c;
+    if (firstHdr < 0 && /^(students?|first\s*name|forename|name)$/.test(k)) firstHdr = c;
+    if (surnameHdr < 0 && /^(surname|last\s*name|family\s*name)$/.test(k)) surnameHdr = c;
   });
-  if (firstCol < 0) firstCol = numberCol >= 0 ? numberCol + 1 : 1;
-  if (surnameCol < 0) surnameCol = firstCol + 1;
-  // No number header? Maybe IDs sit in the column before the first name.
-  if (numberCol < 0) {
-    const probe = firstCol - 1;
-    if (probe >= 0 && probe !== surnameCol && columnLooksLikeIds(rows, h, probe)) numberCol = probe;
+
+  let firstCol = -1;
+  let surnameCol = -1;
+  if (surnameHdr >= 0) {
+    surnameCol = surnameHdr;
+    firstCol = firstHdr >= 0 ? firstHdr : surnameHdr - 1;
+  } else if (firstHdr >= 0) {
+    firstCol = firstHdr;
+    surnameCol = firstHdr + 1;
+  } else {
+    // No name headers: take the first two adjacent columns that hold names.
+    for (let c = 0; c < Math.min(header.length, 6) - 1; c += 1) {
+      if (columnIsNames(rows, h, c) && columnIsNames(rows, h, c + 1)) {
+        firstCol = c;
+        surnameCol = c + 1;
+        break;
+      }
+    }
   }
+
+  if (numberCol < 0 && firstCol > 0) {
+    const probe = firstCol - 1;
+    if (probe !== surnameCol && columnLooksLikeIds(rows, h, probe)) numberCol = probe;
+  }
+
+  if (!columnIsNames(rows, h, firstCol) || !columnIsNames(rows, h, surnameCol)) return null;
   return { numberCol, firstCol, surnameCol };
 }
 
@@ -306,7 +346,12 @@ function parseWorkbook(sheets) {
       continue;
     }
 
-    const { numberCol, firstCol, surnameCol } = locateNameColumns(rows, h);
+    const cols = locateNameColumns(rows, h);
+    if (!cols) {
+      skipped.push({ name: sheet.name, reason: 'could not identify name columns (inconsistent layout)' });
+      continue;
+    }
+    const { numberCol, firstCol, surnameCol } = cols;
     const critCols = criterionColumns(rows, h, surnameCol);
     if (critCols.length === 0) {
       skipped.push({ name: sheet.name, reason: 'no P/M/D criteria columns (summary or numeric headers)' });
@@ -317,12 +362,17 @@ function parseWorkbook(sheets) {
     const assignments = groupAssignments(critCols);
 
     const students = [];
+    let skippedRows = 0;
     for (let r = h + 1; r < rows.length; r += 1) {
       const first = firstCol >= 0 ? cell(rows, r, firstCol) : '';
       const last = surnameCol >= 0 ? cell(rows, r, surnameCol) : '';
-      const name = (first + ' ' + last).trim();
-      if (!name) continue;
       if (normKey(first) === 'students' || normKey(last) === 'surname') continue;
+      // Need a real first name; skip misaligned/blank rows rather than guess.
+      if (!valueIsName(first)) {
+        if (last) skippedRows += 1;
+        continue;
+      }
+      const name = (first + ' ' + last).trim();
       const rawNumber = numberCol >= 0 ? cell(rows, r, numberCol) : '';
       const studentNumber = /\d/.test(rawNumber) ? rawNumber : ''; // ignore "Withdrawn" etc.
       const marks = {};
@@ -335,6 +385,7 @@ function parseWorkbook(sheets) {
       tab: sheet.name,
       assignments,
       inferredCodes,
+      skippedRows,
       students,
     });
   }

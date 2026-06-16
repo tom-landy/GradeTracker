@@ -31,6 +31,12 @@
     <% payload.units.forEach(function (u) { %>
       <div class="card">
         <strong><%= u.name %></strong> <span class="muted small">(from tab “<%= u.tab %>”, <%= u.students.length %> students)</span>
+        <% if (u.inferredCodes && u.inferredCodes.length) { %>
+          <span class="muted small"> · inferred missing header(s): <%= u.inferredCodes.join(', ') %></span>
+        <% } %>
+        <% if (u.skippedRows) { %>
+          <span class="muted small"> · <%= u.skippedRows %> row(s) skipped (no first name)</span>
+        <% } %>
         <div class="assignments mt">
           <% u.assignments.forEach(function (a) { %>
             <div class="assignment">

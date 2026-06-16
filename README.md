@@ -73,15 +73,20 @@ re-uploading updates rather than duplicates.
 ### Student numbers & GDPR-friendly display
 
 If a tab has a **Student No.** column (e.g. `SC243208`), it's captured and used
-to match students across tabs (falling back to name). On the **shared student
-page**, students are shown as **`StudentNo · First L.`** — first name plus last
-initial only, never the full surname. The teacher's admin area still shows full
-names so you can identify students.
+to match students across tabs (falling back to name). Students are shown as
+**`StudentNo · First L.`** — first name plus last initial only, never the full
+surname — **everywhere, including the teacher admin**. Full names are stored
+(used for matching) but only revealed when you expand "Edit name / student
+number" on a student. You can also clear everything via **Danger zone → Clear
+all data** on the dashboard to re-import from scratch.
 
-The importer also copes with common sheet quirks: names split into First/Surname
-columns, a blank/offset **P1** header (inferred from the next code), and
-`Withdrawn` in the number column (ignored as a number). Tabs whose criteria use
-numeric headers (no P/M/D codes) are skipped and reported.
+The importer copes with common sheet quirks: names split into First/Surname
+columns (in either header position), a blank/offset **P1** header (inferred from
+the next code), and `Withdrawn` in the number column (ignored). For safety it
+**validates that name columns actually contain names** and **skips tabs/rows it
+can't parse cleanly** (e.g. numeric criteria headers, summary-only tabs,
+misaligned rows) rather than inventing records — everything skipped is reported
+after import.
 
 ## Running it
 

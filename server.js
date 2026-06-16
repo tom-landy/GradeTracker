@@ -107,9 +107,17 @@ app.post('/admin/students', requireAdmin, (req, res) => {
 });
 
 app.post('/admin/students/:id/rename', requireAdmin, (req, res) => {
-  const name = (req.body.name || '').trim();
-  if (name) store.renameStudent(req.params.id, name);
+  store.updateStudentDetails(req.params.id, {
+    name: req.body.name,
+    studentNumber: req.body.studentNumber,
+  });
   res.redirect('/admin/students/' + req.params.id);
+});
+
+// Danger zone: wipe everything so the teacher can re-import from scratch.
+app.post('/admin/reset', requireAdmin, (req, res) => {
+  if ((req.body.confirm || '').trim().toUpperCase() === 'DELETE') store.resetAll();
+  res.redirect('/admin');
 });
 
 app.post('/admin/students/:id/regenerate', requireAdmin, (req, res) => {

@@ -68,9 +68,7 @@
         <div class="card student-row">
           <div class="grow">
             <div class="row between">
-              <a class="student-name" href="/admin/students/<%= s.id %>">
-                <%= fullName(s) %><% if (s.studentNumber) { %> <span class="muted small">(<%= s.studentNumber %>)</span><% } %>
-              </a>
+              <a class="student-name" href="/admin/students/<%= s.id %>"><%= publicLabel(s) %></a>
               <span class="badge"><%= s.summary.done %>/<%= s.summary.total %> done</span>
             </div>
             <div class="bar"><span style="width: <%= s.summary.pct %>%"></span></div>
@@ -82,7 +80,7 @@
               <a class="btn small" href="/s/<%= s.token %>" target="_blank" rel="noopener">Open</a>
               <a class="btn small" href="/admin/students/<%= s.id %>">Mark work</a>
               <form method="post" action="/admin/students/<%= s.id %>/delete"
-                    onsubmit="return confirm('Delete <%= fullName(s) %>? This cannot be undone.')">
+                    onsubmit="return confirm('Delete <%= publicLabel(s) %>? This cannot be undone.')">
                 <button class="btn small danger">Delete</button>
               </form>
             </div>
@@ -90,6 +88,18 @@
         </div>
       <% }); %>
     </div>
+  </section>
+
+  <section class="card danger-zone">
+    <h2>Danger zone — clear all data</h2>
+    <p class="muted small">Permanently deletes every unit, criterion, student and
+      all progress, leaving an empty dataset ready for a fresh import. This cannot
+      be undone. Type <code>DELETE</code> to confirm.</p>
+    <form method="post" action="/admin/reset" class="row gap wrap"
+          onsubmit="return confirm('Clear ALL data? This cannot be undone.')">
+      <input type="text" name="confirm" placeholder="Type DELETE" />
+      <button type="submit" class="btn small danger">Clear all data</button>
+    </form>
   </section>
 </main>
 
