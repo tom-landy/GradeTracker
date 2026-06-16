@@ -18,6 +18,22 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Importing students & progress (CSV)
+
+From the admin dashboard you can bulk-load students and their progress:
+
+1. Click **Download CSV (template & backup)**. The file has one column per
+   criterion, headed `Unit 1 | P1`, `Unit 1 | P2`, …, and a row per existing
+   student.
+2. In a spreadsheet, add a row per student (first column = name) and put an
+   **x** in each criterion they've completed (blank = outstanding). Accepted
+   "complete" values: `x`, `yes`, `1`, `done`, `✓`.
+3. Back in the admin, upload the file (or paste the CSV) under **Import / export**.
+
+Students are matched by name (case-insensitive) or created automatically. Only
+the criteria included as columns are changed. Unrecognised columns are ignored
+and reported. The same CSV download also works as a simple backup.
+
 ## Running it
 
 ```bash

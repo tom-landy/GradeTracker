@@ -22,6 +22,27 @@
     </form>
   </section>
 
+  <section class="card">
+    <h2>Import / export (CSV)</h2>
+    <p class="muted small">
+      Upload a spreadsheet of students and their progress. Easiest way: download
+      the CSV below (it includes every criterion as a column and any existing
+      students), fill in an <strong>x</strong> where a criterion is complete,
+      then upload it back. Students are matched by name or created automatically.
+    </p>
+    <p><a class="btn small" href="/admin/export.csv">⬇ Download CSV (template &amp; backup)</a></p>
+
+    <form method="post" action="/admin/import" data-import-form>
+      <label for="csvfile">Upload a CSV file</label>
+      <input type="file" id="csvfile" accept=".csv,text/csv" />
+      <details class="mt">
+        <summary class="muted small">…or paste CSV text</summary>
+        <textarea name="csv" id="csvtext" rows="6" placeholder="Student,Unit 1 | P1,Unit 1 | P2,...&#10;Alice,x,,..."></textarea>
+      </details>
+      <div class="mt"><button type="submit" class="btn primary">Import CSV</button></div>
+    </form>
+  </section>
+
   <section>
     <h2>Students</h2>
     <% if (students.length === 0) { %>

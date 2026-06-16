@@ -55,6 +55,28 @@ if (main) {
   });
 }
 
+// CSV import: read the chosen file into the textarea that actually gets posted.
+const importForm = document.querySelector('[data-import-form]');
+if (importForm) {
+  const fileInput = importForm.querySelector('#csvfile');
+  const textArea = importForm.querySelector('#csvtext');
+  if (fileInput && textArea) {
+    fileInput.addEventListener('change', function () {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () { textArea.value = String(reader.result || ''); };
+      reader.readAsText(file);
+    });
+    importForm.addEventListener('submit', function (e) {
+      if (!textArea.value.trim()) {
+        e.preventDefault();
+        alert('Choose a CSV file or paste CSV text first.');
+      }
+    });
+  }
+}
+
 function updateSummary(summary) {
   if (!summary) return;
   const count = document.getElementById('count');

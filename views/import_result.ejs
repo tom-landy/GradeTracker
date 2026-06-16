@@ -1,0 +1,42 @@
+<%- include('partials/head', { pageTitle: 'Import result' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container narrow-ish">
+  <h1>CSV import</h1>
+
+  <% if (error) { %>
+    <p class="error"><%= error %></p>
+  <% } else { %>
+    <div class="card">
+      <p class="done-msg">✓ Import complete.</p>
+      <ul>
+        <li><strong><%= result.created %></strong> new student<%= result.created === 1 ? '' : 's' %> created</li>
+        <li><strong><%= result.updated %></strong> existing student<%= result.updated === 1 ? '' : 's' %> updated</li>
+        <li><strong><%= result.marksComplete %></strong> criteria marked complete</li>
+        <li><strong><%= result.marksOutstanding %></strong> criteria set to outstanding</li>
+      </ul>
+    </div>
+
+    <% if (unknownColumns.length) { %>
+      <div class="card outstanding-box">
+        <p><strong>Some columns weren't recognised and were ignored:</strong></p>
+        <p class="small"><%= unknownColumns.join(', ') %></p>
+        <p class="muted small">Column headings must match a criterion exactly, e.g.
+          <code>Unit 1 | P1</code>. Download the CSV from the dashboard to get the
+          correct headings, or add those criteria in Units &amp; criteria first.</p>
+      </div>
+    <% } %>
+  <% } %>
+
+  <p><a class="btn" href="/admin">← Back to students</a></p>
+</main>
+<%- include('partials/foot') %>

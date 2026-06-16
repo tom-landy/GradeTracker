@@ -69,6 +69,18 @@ input[type="text"], input[type="password"] {
   min-width: 0;
 }
 .narrow-input { width: 5rem; }
+textarea {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+details summary { cursor: pointer; }
+.narrow-ish { max-width: 640px; }
+code { background: #eef2ff; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
 form { margin: 0; }
 label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 .narrow form label + input { width: 100%; }

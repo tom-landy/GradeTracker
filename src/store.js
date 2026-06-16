@@ -289,6 +289,50 @@ function deleteStudent(studentId) {
   save();
 }
 
+function getStudentByName(name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  return load().students.find((s) => s.name.trim().toLowerCase() === wanted) || null;
+}
+
+// Bulk upsert from a CSV import. Each record:
+//   { name, complete: [criterionId...], outstanding: [criterionId...] }
+// Students are matched by name (case-insensitive) or created. Only the criteria
+// listed in a record are touched; everything else is left as-is. Saves once.
+function applyImport(records) {
+  load();
+  let created = 0;
+  let updated = 0;
+  let marksComplete = 0;
+  let marksOutstanding = 0;
+  for (const rec of records) {
+    let student = getStudentByName(rec.name);
+    if (!student) {
+      student = {
+        id: id(),
+        name: rec.name.trim(),
+        token: studentToken(),
+        createdAt: new Date().toISOString(),
+      };
+      db.students.push(student);
+      db.progress[student.id] = {};
+      created += 1;
+    } else {
+      updated += 1;
+    }
+    if (!db.progress[student.id]) db.progress[student.id] = {};
+    for (const cid of rec.complete) {
+      db.progress[student.id][cid] = true;
+      marksComplete += 1;
+    }
+    for (const cid of rec.outstanding) {
+      delete db.progress[student.id][cid];
+      marksOutstanding += 1;
+    }
+  }
+  save();
+  return { created, updated, marksComplete, marksOutstanding };
+}
+
 function setProgress(studentId, criterionId, complete) {
   load();
   if (!db.progress[studentId]) db.progress[studentId] = {};
@@ -309,6 +353,8 @@ module.exports = {
   studentsOrdered,
   getStudent,
   getStudentByToken,
+  getStudentByName,
+  applyImport,
   isComplete,
   progressSummary,
   addUnit,

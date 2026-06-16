@@ -5,6 +5,20 @@ const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const store = require('./src/store');
+const csv = require('./src/csv');
+
+// Ordered list of every criterion with its CSV column label "<Unit> | <code>".
+function criterionColumns() {
+  const cols = [];
+  for (const unit of store.buildTree()) {
+    for (const assignment of unit.assignments) {
+      for (const c of assignment.criteria) {
+        cols.push({ id: c.id, label: `${unit.name} | ${c.code}` });
+      }
+    }
+  }
+  return cols;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +27,7 @@ const COOKIE_SECRET = process.env.COOKIE_SECRET || crypto.randomBytes(16).toStri
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '5mb' }));
 app.use(express.json());
 app.use(cookieParser(COOKIE_SECRET));
 app.use('/static', express.static(path.join(__dirname, 'public')));
@@ -124,6 +138,62 @@ app.post('/admin/progress', requireAdmin, (req, res) => {
   if (!studentId || !criterionId) return res.status(400).json({ ok: false });
   store.setProgress(studentId, criterionId, !!complete);
   res.json({ ok: true, summary: store.progressSummary(studentId) });
+});
+
+// ---- Admin: CSV export / import ---------------------------------------------
+
+// Download the current data as CSV. This file IS the import template: edit it
+// (mark cells x / blank) and upload it back. Doubles as a simple backup.
+app.get('/admin/export.csv', requireAdmin, (req, res) => {
+  const cols = criterionColumns();
+  const rows = [['Student', ...cols.map((c) => c.label)]];
+  for (const s of store.studentsOrdered()) {
+    rows.push([s.name, ...cols.map((c) => (store.isComplete(s.id, c.id) ? 'x' : ''))]);
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="gradetracker.csv"');
+  res.send(csv.stringify(rows));
+});
+
+app.post('/admin/import', requireAdmin, (req, res) => {
+  const rows = csv.parse(req.body.csv || '');
+  if (rows.length < 2) {
+    return res.status(400).render('import_result', {
+      error: 'No data found. The file needs a header row plus at least one student row.',
+      result: null,
+      unknownColumns: [],
+    });
+  }
+
+  // Map header columns (skip column 0 = student name) to criterion ids.
+  const byKey = new Map(criterionColumns().map((c) => [csv.normKey(c.label), c.id]));
+  const header = rows[0];
+  const colToCriterion = []; // index aligned with header
+  const unknownColumns = [];
+  for (let i = 1; i < header.length; i += 1) {
+    const cid = byKey.get(csv.normKey(header[i]));
+    colToCriterion[i] = cid || null;
+    if (!cid && String(header[i]).trim()) unknownColumns.push(header[i]);
+  }
+
+  const records = [];
+  for (let r = 1; r < rows.length; r += 1) {
+    const row = rows[r];
+    const name = String(row[0] || '').trim();
+    if (!name) continue;
+    const complete = [];
+    const outstanding = [];
+    for (let i = 1; i < header.length; i += 1) {
+      const cid = colToCriterion[i];
+      if (!cid) continue; // unrecognised column: ignore
+      if (csv.isTruthy(row[i])) complete.push(cid);
+      else outstanding.push(cid);
+    }
+    records.push({ name, complete, outstanding });
+  }
+
+  const result = store.applyImport(records);
+  res.render('import_result', { error: null, result, unknownColumns });
 });
 
 // ---- Admin: units / assignments / criteria ----------------------------------
