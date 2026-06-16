@@ -1,0 +1,73 @@
+# GradeTracker
+
+Track BTEC-style student work and share each student a private, read-only link
+showing what they've completed and what's still **outstanding before the end of
+the year**.
+
+Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
+**Assignments** (A1, A2, …), and each assignment covers a set of
+**Pass / Merit / Distinction** criteria (P1, M1, D1, …).
+
+## What it does
+
+- **Teacher admin** (password-protected):
+  - Add students; each gets a unique private link automatically.
+  - Tick criteria complete/outstanding in a per-student grid (saves instantly).
+  - Add / rename / delete units, assignments and criteria.
+- **Students** open their own link (`/s/<token>`) and see **only their own**
+  progress — a clear "still to complete" list plus the full breakdown. No login.
+  They can print it or save as PDF.
+
+## Running it
+
+```bash
+npm install
+ADMIN_PASSWORD=yourpassword npm start
+```
+
+Then open http://localhost:3000 and sign in.
+
+### Environment variables
+
+| Variable         | Default      | Purpose                                              |
+| ---------------- | ------------ | ---------------------------------------------------- |
+| `PORT`           | `3000`       | Port to listen on.                                   |
+| `ADMIN_PASSWORD` | `changeme`   | Teacher sign-in password. **Change this.**           |
+| `COOKIE_SECRET`  | random       | Set a fixed value so admin sessions survive restarts. |
+
+## Deploying
+
+The app needs a **persistent disk** for `data/db.json`. Point `DATA_DIR` at the
+mounted volume.
+
+**Render (one-click via blueprint):** `render.yaml` is included. Create a new
+Blueprint from this repo, then set `ADMIN_PASSWORD` in the dashboard. It
+provisions a 1 GB persistent disk mounted at `/data`. See **[DEPLOY.md](DEPLOY.md)**
+for a full step-by-step, non-technical walkthrough.
+
+**Docker / any host:**
+
+```bash
+docker build -t gradetracker .
+docker run -p 3000:3000 \
+  -e ADMIN_PASSWORD=yourpassword \
+  -e COOKIE_SECRET=some-long-random-string \
+  -v gradetracker-data:/data \
+  gradetracker
+```
+
+The `-v` volume keeps your data across restarts and image rebuilds.
+
+## Data
+
+All data lives in `data/db.json` (created on first run and seeded with Units 1,
+4, 8, 9 and 27 from the sheet). It's git-ignored. Back it up to keep your data;
+delete it to reset to the seed.
+
+## Notes
+
+- Student links are unguessable tokens. Anyone with a link can view that
+  student's progress (read-only), so share them privately. Use **Regenerate
+  link** on a student to invalidate the old one.
+- Unit 8's criteria were blank on the original sheet, so its assignments start
+  empty — add criteria in **Units & criteria**.

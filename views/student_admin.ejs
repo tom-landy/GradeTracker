@@ -1,0 +1,77 @@
+<%- include('partials/head', { pageTitle: 'Mark · ' + student.name }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container" data-student-id="<%= student.id %>">
+  <p class="muted"><a href="/admin">&larr; All students</a></p>
+  <h1>Mark work — <%= student.name %></h1>
+
+  <div class="row between wrap card">
+    <div class="grow">
+      <div class="row between">
+        <span><strong id="count"><%= summary.done %></strong> / <%= summary.total %> criteria complete</span>
+        <span class="badge" id="pct"><%= summary.pct %>%</span>
+      </div>
+      <div class="bar"><span id="bar" style="width: <%= summary.pct %>%"></span></div>
+    </div>
+  </div>
+
+  <p class="muted">Click a criterion to toggle it between <span class="legend outstanding">outstanding</span>
+    and <span class="legend complete">complete</span>. Changes save automatically.</p>
+
+  <form method="post" action="/admin/students/<%= student.id %>/rename" class="row gap wrap card">
+    <input type="text" name="name" value="<%= student.name %>" />
+    <button class="btn small">Rename</button>
+  </form>
+
+  <% tree.forEach(function (unit) { %>
+    <section class="unit">
+      <h2><%= unit.name %></h2>
+      <% if (unit.assignments.every(function(a){ return a.criteria.length === 0; })) { %>
+        <p class="muted">No criteria yet — add them in <a href="/admin/units">Units &amp; criteria</a>.</p>
+      <% } %>
+      <div class="assignments">
+        <% unit.assignments.forEach(function (a) { %>
+          <div class="assignment">
+            <div class="assignment-name"><%= a.name %></div>
+            <div class="criteria">
+              <% a.criteria.forEach(function (c) { %>
+                <button type="button"
+                        class="crit toggle <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
+                        data-criterion-id="<%= c.id %>"
+                        data-complete="<%= c.complete ? '1' : '0' %>"
+                        title="<%= c.type %>"><%= c.code %></button>
+              <% }); %>
+              <% if (a.criteria.length === 0) { %><span class="muted small">(none)</span><% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </section>
+  <% }); %>
+
+  <section class="card">
+    <h2>Sharing</h2>
+    <p class="muted">This student's private read-only link:</p>
+    <div class="row gap wrap">
+      <input class="share-link grow" type="text" readonly value="<%= baseUrl %>/s/<%= student.token %>" onclick="this.select()" />
+      <button type="button" class="btn small" data-copy="<%= baseUrl %>/s/<%= student.token %>">Copy link</button>
+      <a class="btn small" href="/s/<%= student.token %>" target="_blank" rel="noopener">Open</a>
+    </div>
+    <form method="post" action="/admin/students/<%= student.id %>/regenerate" class="mt"
+          onsubmit="return confirm('Regenerate link? The old link will stop working.')">
+      <button class="btn small danger">Regenerate link</button>
+    </form>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+<%- include('partials/foot') %>

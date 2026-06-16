@@ -1,0 +1,67 @@
+<%- include('partials/head', { pageTitle: student.name }) %>
+<main class="container student-public">
+  <div class="row between wrap no-print">
+    <p class="muted">Your progress · read only</p>
+    <button type="button" class="btn small" onclick="window.print()">Print / save PDF</button>
+  </div>
+
+  <h1><%= title %></h1>
+  <p class="lead">Hi <%= student.name %> — here's everything you've completed and what's still
+    outstanding before the end of the year.</p>
+
+  <div class="card summary">
+    <div class="row between">
+      <span><strong><%= summary.done %></strong> of <%= summary.total %> criteria complete</span>
+      <span class="badge"><%= summary.pct %>%</span>
+    </div>
+    <div class="bar"><span style="width: <%= summary.pct %>%"></span></div>
+  </div>
+
+  <%
+    var allOutstanding = [];
+    tree.forEach(function (u) { if (u.unitOutstanding.length) allOutstanding.push(u); });
+  %>
+
+  <section class="card outstanding-box">
+    <h2>Still to complete</h2>
+    <% if (allOutstanding.length === 0) { %>
+      <p class="done-msg">🎉 Nothing outstanding — all tracked criteria are complete. Great work!</p>
+    <% } else { %>
+      <ul class="outstanding-list">
+        <% allOutstanding.forEach(function (u) { %>
+          <li>
+            <strong><%= u.name %>:</strong>
+            <%= u.unitOutstanding.map(function (c) { return c.code; }).join(', ') %>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </section>
+
+  <h2 class="section-head">Full breakdown</h2>
+  <p class="muted no-print">
+    <span class="legend complete">done</span>
+    <span class="legend outstanding">outstanding</span>
+  </p>
+
+  <% tree.forEach(function (unit) { %>
+    <section class="unit">
+      <h3><%= unit.name %></h3>
+      <div class="assignments">
+        <% unit.assignments.forEach(function (a) { %>
+          <div class="assignment">
+            <div class="assignment-name"><%= a.name %></div>
+            <div class="criteria">
+              <% a.criteria.forEach(function (c) { %>
+                <span class="crit <%= c.complete ? 'complete' : 'outstanding' %> type-<%= c.type.charAt(0) %>"
+                      title="<%= c.type %><%= c.complete ? ' · complete' : ' · outstanding' %>"><%= c.code %></span>
+              <% }); %>
+              <% if (a.criteria.length === 0) { %><span class="muted small">(none yet)</span><% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </section>
+  <% }); %>
+</main>
+<%- include('partials/foot') %>

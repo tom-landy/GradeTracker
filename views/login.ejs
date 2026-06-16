@@ -1,0 +1,12 @@
+<%- include('partials/head', { pageTitle: 'Sign in' }) %>
+<main class="container narrow">
+  <h1>GradeTracker</h1>
+  <p class="muted">Teacher sign in</p>
+  <% if (error) { %><p class="error"><%= error %></p><% } %>
+  <form method="post" action="/admin/login" class="card">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autofocus required />
+    <button type="submit" class="btn primary">Sign in</button>
+  </form>
+</main>
+<%- include('partials/foot') %>

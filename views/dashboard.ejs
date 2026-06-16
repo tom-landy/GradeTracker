@@ -1,0 +1,59 @@
+<%- include('partials/head', { pageTitle: 'Admin' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  <h1><%= title %></h1>
+  <p class="muted">Tracking <%= totalCriteria %> criteria across <%= tree.length %> units.</p>
+
+  <section class="card">
+    <h2>Add a student</h2>
+    <form method="post" action="/admin/students" class="row gap wrap">
+      <input type="text" name="name" placeholder="Student name" required />
+      <button type="submit" class="btn primary">Add student</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Students</h2>
+    <% if (students.length === 0) { %>
+      <p class="muted">No students yet. Add one above to start tracking and to generate a shareable link.</p>
+    <% } %>
+    <div class="student-list">
+      <% students.forEach(function (s) { %>
+        <div class="card student-row">
+          <div class="grow">
+            <div class="row between">
+              <a class="student-name" href="/admin/students/<%= s.id %>"><%= s.name %></a>
+              <span class="badge"><%= s.summary.done %>/<%= s.summary.total %> done</span>
+            </div>
+            <div class="bar"><span style="width: <%= s.summary.pct %>%"></span></div>
+            <div class="row gap wrap link-row">
+              <input class="share-link" type="text" readonly
+                     value="<%= baseUrl %>/s/<%= s.token %>"
+                     onclick="this.select()" />
+              <button type="button" class="btn small" data-copy="<%= baseUrl %>/s/<%= s.token %>">Copy link</button>
+              <a class="btn small" href="/s/<%= s.token %>" target="_blank" rel="noopener">Open</a>
+              <a class="btn small" href="/admin/students/<%= s.id %>">Mark work</a>
+              <form method="post" action="/admin/students/<%= s.id %>/delete"
+                    onsubmit="return confirm('Delete <%= s.name %>? This cannot be undone.')">
+                <button class="btn small danger">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+<%- include('partials/foot') %>
