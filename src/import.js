@@ -308,13 +308,15 @@ function criterionColumns(rows, h, surnameCol) {
   return inferred.concat(coded);
 }
 
-// Group adjacent criterion columns into assignments (A1, A2, ...). Only used
-// when a brand-new unit is created; existing units keep their structure.
+// Group adjacent criterion columns into assignments (A1, A2, ...). A gap of up
+// to one blank column is tolerated so criteria spread over merged 2-column cells
+// stay in one assignment; a wider gap (a grade/points column) starts the next.
+// Only used when a brand-new unit is created; existing units keep their structure.
 function groupAssignments(critCols) {
   const groups = [];
   let cur = null;
   for (const cc of critCols) {
-    if (cur && cc.col === cur.lastCol + 1) {
+    if (cur && cc.col - cur.lastCol <= 2) {
       cur.codes.push(cc.code);
       cur.lastCol = cc.col;
     } else {
