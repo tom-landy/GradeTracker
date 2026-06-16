@@ -70,6 +70,19 @@ the `.xlsx`. It reads every tab whose name identifies a unit (e.g. `Unit 8` or
 Already-existing units/criteria are reused (matched by name/code), so
 re-uploading updates rather than duplicates.
 
+### Student numbers & GDPR-friendly display
+
+If a tab has a **Student No.** column (e.g. `SC243208`), it's captured and used
+to match students across tabs (falling back to name). On the **shared student
+page**, students are shown as **`StudentNo · First L.`** — first name plus last
+initial only, never the full surname. The teacher's admin area still shows full
+names so you can identify students.
+
+The importer also copes with common sheet quirks: names split into First/Surname
+columns, a blank/offset **P1** header (inferred from the next code), and
+`Withdrawn` in the number column (ignored as a number). Tabs whose criteria use
+numeric headers (no P/M/D codes) are skipped and reported.
+
 ## Running it
 
 ```bash

@@ -41,6 +41,8 @@ app.use('/static', express.static(path.join(__dirname, 'public')));
 app.use((req, res, next) => {
   res.locals.baseUrl = `${req.protocol}://${req.get('host')}`;
   res.locals.title = store.getSettings().title;
+  res.locals.publicLabel = store.publicLabel;
+  res.locals.fullName = store.fullName;
   next();
 });
 

@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: 'Mark · ' + student.name }) %>
+<%- include('partials/head', { pageTitle: 'Mark · ' + fullName(student) }) %>
 <header class="topbar">
   <div class="container row between">
     <strong>GradeTracker</strong>
@@ -12,7 +12,8 @@
 
 <main class="container" data-student-id="<%= student.id %>">
   <p class="muted"><a href="/admin">&larr; All students</a></p>
-  <h1>Mark work — <%= student.name %></h1>
+  <h1>Mark work — <%= fullName(student) %><% if (student.studentNumber) { %> <span class="muted">(<%= student.studentNumber %>)</span><% } %></h1>
+  <p class="muted small">Students see this as: <strong><%= publicLabel(student) %></strong> (no surname).</p>
 
   <div class="row between wrap card">
     <div class="grow">

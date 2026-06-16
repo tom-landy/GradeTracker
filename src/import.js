@@ -169,6 +169,12 @@ function isCode(value) {
   return /^[PMD]\d+$/i.test(String(value == null ? '' : value).trim());
 }
 
+function cell(rows, r, c) {
+  const row = rows[r];
+  if (!row) return '';
+  return String(row[c] == null ? '' : row[c]).trim();
+}
+
 // "U1 A123" -> "Unit 1", "Unit 8" -> "Unit 8". Null if no unit number found.
 function unitNameFromTab(tab) {
   const m = String(tab || '').match(/u(?:nit)?\s*0*([0-9]+)/i);
@@ -178,33 +184,111 @@ function unitNameFromTab(tab) {
 function findHeaderRowIdx(rows) {
   for (let i = 0; i < rows.length; i += 1) {
     const lc = rows[i].map((c) => String(c == null ? '' : c).trim().toLowerCase());
-    if (lc.includes('surname')) return i;
+    if (lc.includes('surname') || lc.includes('students') || lc.includes('student')) return i;
     if (rows[i].filter(isCode).length >= 3) return i;
   }
   return -1;
 }
 
-// Turn the criterion columns into assignments: a run of adjacent criterion
-// columns is one assignment; a gap (grade/points column) starts the next.
+// Does a column below the header look like criterion marks (y / n / r / u)?
+function columnIsMarks(rows, h, c) {
+  let marks = 0;
+  let total = 0;
+  for (let r = h + 1; r < rows.length; r += 1) {
+    const v = cell(rows, r, c).toLowerCase();
+    if (!v) continue;
+    total += 1;
+    if (v === 'y' || v === 'n' || v === 'r' || v === 'u') marks += 1;
+  }
+  return total > 0 && marks / total >= 0.6;
+}
+
+// Does a column look like student-number IDs (e.g. SC243208)?
+function columnLooksLikeIds(rows, h, c) {
+  let ids = 0;
+  let total = 0;
+  for (let r = h + 1; r < rows.length; r += 1) {
+    const v = cell(rows, r, c);
+    if (!v) continue;
+    total += 1;
+    if (/^[A-Za-z]{0,5}\d{3,}$/.test(v)) ids += 1;
+  }
+  return total > 0 && ids / total >= 0.5;
+}
+
+// Locate the student-number, first-name and surname columns from the header,
+// with sensible fallbacks for sheets that only label "Students".
+function locateNameColumns(rows, h) {
+  const header = rows[h];
+  let numberCol = -1;
+  let firstCol = -1;
+  let surnameCol = -1;
+  header.forEach((raw, c) => {
+    const k = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (numberCol < 0 && (/(student|candidate).*(no\b|no\.|number)/.test(k) || /^(uln|reg\.?\s*no)/.test(k))) numberCol = c;
+    if (firstCol < 0 && /^(students?|first\s*name|forename|name)$/.test(k)) firstCol = c;
+    if (surnameCol < 0 && /^(surname|last\s*name|family\s*name)$/.test(k)) surnameCol = c;
+  });
+  if (firstCol < 0) firstCol = numberCol >= 0 ? numberCol + 1 : 1;
+  if (surnameCol < 0) surnameCol = firstCol + 1;
+  // No number header? Maybe IDs sit in the column before the first name.
+  if (numberCol < 0) {
+    const probe = firstCol - 1;
+    if (probe >= 0 && probe !== surnameCol && columnLooksLikeIds(rows, h, probe)) numberCol = probe;
+  }
+  return { numberCol, firstCol, surnameCol };
+}
+
+// Build the ordered criterion columns. Codes come from the header; a leading
+// unlabelled mark column (the common "P1 header is blank/offset" quirk) is
+// inferred by counting back from the first real code.
+function criterionColumns(rows, h, surnameCol) {
+  const header = rows[h];
+  const coded = [];
+  for (let c = surnameCol + 1; c < header.length; c += 1) {
+    if (isCode(header[c])) coded.push({ col: c, code: String(header[c]).trim().toUpperCase(), inferred: false });
+  }
+  if (coded.length === 0) return [];
+
+  const inferred = [];
+  const firstCodeCol = coded[0].col;
+  const leadCols = [];
+  for (let c = surnameCol + 1; c < firstCodeCol; c += 1) {
+    if (columnIsMarks(rows, h, c)) leadCols.push(c);
+  }
+  const m = coded[0].code.match(/^([PMD])(\d+)$/);
+  if (m && leadCols.length) {
+    const letter = m[1];
+    const startNum = parseInt(m[2], 10) - leadCols.length;
+    leadCols.forEach((c, i) => {
+      const n = startNum + i;
+      if (n >= 1) inferred.push({ col: c, code: letter + n, inferred: true });
+    });
+  }
+  return inferred.concat(coded);
+}
+
+// Group adjacent criterion columns into assignments (A1, A2, ...). Only used
+// when a brand-new unit is created; existing units keep their structure.
 function groupAssignments(critCols) {
   const groups = [];
   let cur = null;
   for (const cc of critCols) {
     if (cur && cc.col === cur.lastCol + 1) {
       cur.codes.push(cc.code);
-      cur.cols.push(cc.col);
       cur.lastCol = cc.col;
     } else {
-      cur = { codes: [cc.code], cols: [cc.col], lastCol: cc.col };
+      cur = { codes: [cc.code], lastCol: cc.col };
       groups.push(cur);
     }
   }
-  return groups.map((g, i) => ({ name: 'A' + (i + 1), criteria: g.codes, cols: g.cols }));
+  return groups.map((g, i) => ({ name: 'A' + (i + 1), criteria: g.codes }));
 }
 
-// Parse criterion-level tabs from a workbook into an import payload:
-//   { units: [{ name, assignments:[{name,criteria}], students:[{name,marks}] }],
-//     skipped: [{ name, reason }] }
+// Parse criterion-level tabs into an import payload:
+//   units: [{ name, tab, assignments:[{name,criteria}], inferredCodes:[...],
+//             students:[{ studentNumber, firstName, lastName, name, marks:{CODE:bool} }] }]
+//   skipped: [{ name, reason }]
 function parseWorkbook(sheets) {
   const units = [];
   const skipped = [];
@@ -218,45 +302,39 @@ function parseWorkbook(sheets) {
     const rows = sheet.rows || [];
     const h = findHeaderRowIdx(rows);
     if (h < 0) {
-      skipped.push({ name: sheet.name, reason: 'no criteria header found' });
-      continue;
-    }
-    const header = rows[h];
-    const critCols = [];
-    for (let c = 0; c < header.length; c += 1) {
-      if (isCode(header[c])) critCols.push({ col: c, code: String(header[c]).trim().toUpperCase() });
-    }
-    if (critCols.length === 0) {
-      skipped.push({ name: sheet.name, reason: 'no per-criterion columns (summary only)' });
+      skipped.push({ name: sheet.name, reason: 'no header row found' });
       continue;
     }
 
+    const { numberCol, firstCol, surnameCol } = locateNameColumns(rows, h);
+    const critCols = criterionColumns(rows, h, surnameCol);
+    if (critCols.length === 0) {
+      skipped.push({ name: sheet.name, reason: 'no P/M/D criteria columns (summary or numeric headers)' });
+      continue;
+    }
+
+    const inferredCodes = critCols.filter((c) => c.inferred).map((c) => c.code);
     const assignments = groupAssignments(critCols);
-    const lc = header.map((c) => String(c == null ? '' : c).trim().toLowerCase());
-    const surnameCol = lc.indexOf('surname');
-    const firstCol = surnameCol > 0 ? surnameCol - 1 : -1;
 
     const students = [];
     for (let r = h + 1; r < rows.length; r += 1) {
-      const row = rows[r];
-      const surname = surnameCol >= 0 ? String(row[surnameCol] == null ? '' : row[surnameCol]).trim() : '';
-      const first = firstCol >= 0 ? String(row[firstCol] == null ? '' : row[firstCol]).trim() : '';
-      const name = (first + ' ' + surname).trim();
+      const first = firstCol >= 0 ? cell(rows, r, firstCol) : '';
+      const last = surnameCol >= 0 ? cell(rows, r, surnameCol) : '';
+      const name = (first + ' ' + last).trim();
       if (!name) continue;
-      if (normKey(name) === 'surname') continue;
+      if (normKey(first) === 'students' || normKey(last) === 'surname') continue;
+      const rawNumber = numberCol >= 0 ? cell(rows, r, numberCol) : '';
+      const studentNumber = /\d/.test(rawNumber) ? rawNumber : ''; // ignore "Withdrawn" etc.
       const marks = {};
-      for (const a of assignments) {
-        for (let j = 0; j < a.cols.length; j += 1) {
-          marks[a.name + '|' + a.criteria[j]] = isComplete(row[a.cols[j]]);
-        }
-      }
-      students.push({ name, marks });
+      for (const cc of critCols) marks[cc.code] = isComplete(cell(rows, r, cc.col));
+      students.push({ studentNumber, firstName: first, lastName: last, name, marks });
     }
 
     units.push({
       name: unitName,
       tab: sheet.name,
-      assignments: assignments.map((a) => ({ name: a.name, criteria: a.criteria })),
+      assignments,
+      inferredCodes,
       students,
     });
   }

@@ -68,7 +68,9 @@
         <div class="card student-row">
           <div class="grow">
             <div class="row between">
-              <a class="student-name" href="/admin/students/<%= s.id %>"><%= s.name %></a>
+              <a class="student-name" href="/admin/students/<%= s.id %>">
+                <%= fullName(s) %><% if (s.studentNumber) { %> <span class="muted small">(<%= s.studentNumber %>)</span><% } %>
+              </a>
               <span class="badge"><%= s.summary.done %>/<%= s.summary.total %> done</span>
             </div>
             <div class="bar"><span style="width: <%= s.summary.pct %>%"></span></div>
@@ -80,7 +82,7 @@
               <a class="btn small" href="/s/<%= s.token %>" target="_blank" rel="noopener">Open</a>
               <a class="btn small" href="/admin/students/<%= s.id %>">Mark work</a>
               <form method="post" action="/admin/students/<%= s.id %>/delete"
-                    onsubmit="return confirm('Delete <%= s.name %>? This cannot be undone.')">
+                    onsubmit="return confirm('Delete <%= fullName(s) %>? This cannot be undone.')">
                 <button class="btn small danger">Delete</button>
               </form>
             </div>

@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: student.name }) %>
+<%- include('partials/head', { pageTitle: publicLabel(student) }) %>
 <main class="container student-public">
   <div class="row between wrap no-print">
     <p class="muted">Your progress · read only</p>
@@ -6,7 +6,7 @@
   </div>
 
   <h1><%= title %></h1>
-  <p class="lead">Hi <%= student.name %> — here's everything you've completed and what's still
+  <p class="lead">Hi <%= publicLabel(student) %> — here's everything you've completed and what's still
     outstanding before the end of the year.</p>
 
   <div class="card summary">

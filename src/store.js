@@ -291,7 +291,35 @@ function deleteStudent(studentId) {
 
 function getStudentByName(name) {
   const wanted = String(name || '').trim().toLowerCase();
-  return load().students.find((s) => s.name.trim().toLowerCase() === wanted) || null;
+  return load().students.find((s) => (s.name || '').trim().toLowerCase() === wanted) || null;
+}
+
+// ---- Display helpers (GDPR-friendly) ----------------------------------------
+
+function fullName(s) {
+  const n = (s.name || '').trim();
+  if (n) return n;
+  return `${s.firstName || ''} ${s.lastName || ''}`.trim();
+}
+
+function firstNameOf(s) {
+  if (s.firstName) return s.firstName.trim();
+  const parts = fullName(s).split(/\s+/);
+  return parts[0] || '';
+}
+
+function lastInitialOf(s) {
+  if (s.lastName) return s.lastName.trim().charAt(0).toUpperCase();
+  const parts = fullName(s).split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() : '';
+}
+
+// What students see on their shared page: "SC243208 · Alex A." (no surname).
+function publicLabel(s) {
+  const number = (s.studentNumber || '').trim();
+  const li = lastInitialOf(s);
+  const namePart = [firstNameOf(s), li ? li + '.' : ''].filter(Boolean).join(' ');
+  return [number, namePart].filter(Boolean).join(' · ') || 'Student';
 }
 
 // Bulk upsert from a CSV import. Each record:
@@ -333,9 +361,11 @@ function applyImport(records) {
   return { created, updated, marksComplete, marksOutstanding };
 }
 
-// Import a parsed workbook payload. Idempotently ensures units, assignments and
-// criteria exist (matched by name/code), upserts students by name, and sets
-// progress. Saves once. payload.units[].students[].marks is { "A1|P1": bool }.
+// Import a parsed workbook payload. Idempotently ensures units/assignments/
+// criteria exist; maps each criterion by CODE so an existing unit keeps its
+// assignment structure (new codes go under the payload's assignment). Students
+// are matched by student number first, then full name; numbers/names back-fill.
+// Saves once. payload.units[].students[].marks is { CODE: bool }.
 function importWorkbook(payload) {
   load();
   let unitsCreated = 0;
@@ -351,44 +381,64 @@ function importWorkbook(payload) {
       db.units.push(unit);
       unitsCreated += 1;
     }
-    const keyToCid = {};
-    for (const a of u.assignments) {
+
+    // Existing criteria in this unit, keyed by code (first match wins).
+    const codeToCid = {};
+    for (const a of db.assignments.filter((x) => x.unitId === unit.id)) {
+      for (const c of db.criteria.filter((x) => x.assignmentId === a.id)) {
+        const up = c.code.toUpperCase();
+        if (!(up in codeToCid)) codeToCid[up] = c.id;
+      }
+    }
+
+    // Which assignment each code belongs to, per the sheet (for new codes).
+    const codeAssignment = {};
+    for (const a of u.assignments) for (const code of a.criteria) codeAssignment[code.toUpperCase()] = a.name;
+
+    const ensureAssignment = (name) => {
       let asg = db.assignments.find(
-        (x) => x.unitId === unit.id && x.name.trim().toLowerCase() === a.name.trim().toLowerCase()
+        (x) => x.unitId === unit.id && x.name.trim().toLowerCase() === name.trim().toLowerCase()
       );
       if (!asg) {
         asg = {
           id: id(),
           unitId: unit.id,
-          name: a.name.trim(),
+          name: name.trim(),
           position: db.assignments.filter((x) => x.unitId === unit.id).length,
         };
         db.assignments.push(asg);
       }
-      for (const code of a.criteria) {
-        const upper = code.trim().toUpperCase();
-        let crit = db.criteria.find(
-          (x) => x.assignmentId === asg.id && x.code.toUpperCase() === upper
-        );
-        if (!crit) {
-          crit = {
-            id: id(),
-            assignmentId: asg.id,
-            code: upper,
-            position: db.criteria.filter((x) => x.assignmentId === asg.id).length,
-          };
-          db.criteria.push(crit);
-          criteriaCreated += 1;
-        }
-        keyToCid[a.name + '|' + upper] = crit.id;
-      }
+      return asg;
+    };
+
+    const flatCodes = u.assignments.flatMap((a) => a.criteria);
+    for (const code of flatCodes) {
+      const up = code.toUpperCase();
+      if (codeToCid[up]) continue;
+      const asg = ensureAssignment(codeAssignment[up] || 'A1');
+      const crit = {
+        id: id(),
+        assignmentId: asg.id,
+        code: up,
+        position: db.criteria.filter((x) => x.assignmentId === asg.id).length,
+      };
+      db.criteria.push(crit);
+      criteriaCreated += 1;
+      codeToCid[up] = crit.id;
     }
 
     for (const s of u.students) {
-      let student = getStudentByName(s.name);
+      let student = null;
+      if (s.studentNumber) {
+        student = db.students.find((x) => x.studentNumber && x.studentNumber === s.studentNumber);
+      }
+      if (!student) student = getStudentByName(s.name);
       if (!student) {
         student = {
           id: id(),
+          studentNumber: s.studentNumber || '',
+          firstName: s.firstName || '',
+          lastName: s.lastName || '',
           name: s.name.trim(),
           token: studentToken(),
           createdAt: new Date().toISOString(),
@@ -396,13 +446,19 @@ function importWorkbook(payload) {
         db.students.push(student);
         db.progress[student.id] = {};
         studentsCreated += 1;
+      } else {
+        // Back-fill any details this tab provides.
+        if (s.studentNumber && !student.studentNumber) student.studentNumber = s.studentNumber;
+        if (s.firstName && !student.firstName) student.firstName = s.firstName;
+        if (s.lastName && !student.lastName) student.lastName = s.lastName;
+        if (!student.name) student.name = s.name.trim();
       }
       seenStudents.add(student.id);
       if (!db.progress[student.id]) db.progress[student.id] = {};
-      for (const key of Object.keys(s.marks)) {
-        const cid = keyToCid[key];
+      for (const code of Object.keys(s.marks)) {
+        const cid = codeToCid[code.toUpperCase()];
         if (!cid) continue;
-        if (s.marks[key]) {
+        if (s.marks[code]) {
           db.progress[student.id][cid] = true;
           marks += 1;
         } else {
@@ -443,6 +499,8 @@ module.exports = {
   getStudent,
   getStudentByToken,
   getStudentByName,
+  fullName,
+  publicLabel,
   applyImport,
   importWorkbook,
   isComplete,
