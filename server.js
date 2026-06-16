@@ -9,6 +9,7 @@ const store = require('./src/store');
 const csv = require('./src/csv');
 const { parseImport, parseWorkbook } = require('./src/import');
 const { readWorkbook } = require('./src/xlsx');
+const sync = require('./src/sync');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -95,7 +96,13 @@ app.get('/admin', requireAdmin, (req, res) => {
   }));
   const tree = store.buildTree();
   const totalCriteria = store.allCriteria().length;
-  res.render('dashboard', { students, tree, totalCriteria });
+  res.render('dashboard', {
+    students,
+    tree,
+    totalCriteria,
+    syncConfigured: sync.isConfigured(),
+    syncSource: sync.sourceLabel(),
+  });
 });
 
 // ---- Admin: students --------------------------------------------------------
@@ -229,6 +236,37 @@ app.post('/admin/import-xlsx', requireAdmin, upload.single('file'), (req, res) =
   }
   const result = store.importWorkbook(payload);
   res.render('import_workbook_result', { error: null, result, payload });
+});
+
+// Pull the latest workbook from the configured cloud source and re-import it.
+app.post('/admin/sync', requireAdmin, async (req, res) => {
+  if (!sync.isConfigured()) {
+    return res.status(400).render('import_workbook_result', {
+      error: 'Cloud sync is not configured yet. See the "Cloud sync" section of the README to set it up.',
+      result: null,
+      payload: null,
+    });
+  }
+  try {
+    const buffer = await sync.fetchWorkbook();
+    const sheets = readWorkbook(buffer);
+    const payload = parseWorkbook(sheets);
+    if (payload.units.length === 0) {
+      return res.status(400).render('import_workbook_result', {
+        error: 'Synced the file, but found no criterion-level tabs to import.',
+        result: null,
+        payload,
+      });
+    }
+    const result = store.importWorkbook(payload);
+    res.render('import_workbook_result', { error: null, result, payload });
+  } catch (err) {
+    res.status(502).render('import_workbook_result', {
+      error: 'Sync failed: ' + err.message,
+      result: null,
+      payload: null,
+    });
+  }
 });
 
 // ---- Admin: units / assignments / criteria ----------------------------------

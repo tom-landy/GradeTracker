@@ -44,6 +44,20 @@
 
     <hr class="sep" />
 
+    <h3>Sync from the cloud</h3>
+    <% if (syncConfigured) { %>
+      <p class="muted small">Pull the latest workbook from <strong><%= syncSource %></strong> and re-import it.</p>
+      <form method="post" action="/admin/sync"
+            onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Syncing…';">
+        <button type="submit" class="btn primary">⟳ Sync now</button>
+      </form>
+    <% } else { %>
+      <p class="muted small">Cloud sync isn't set up yet. Add a OneDrive/SharePoint source
+        (see the README "Cloud sync" section) to enable a one-click <strong>Sync now</strong> button here.</p>
+    <% } %>
+
+    <hr class="sep" />
+
     <h3>Upload an Excel workbook (.xlsx)</h3>
     <p class="muted small">
       Upload your whole mark book. Every tab named for a unit (e.g.

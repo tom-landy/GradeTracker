@@ -100,6 +100,46 @@ can't parse cleanly** (e.g. numeric criteria headers, summary-only tabs,
 misaligned rows) rather than inventing records — everything skipped is reported
 after import.
 
+## Cloud sync (OneDrive / SharePoint) — "Sync now" button
+
+When configured, the dashboard shows a **Sync now** button that pulls the latest
+workbook from the cloud and re-imports it (idempotent — matches existing
+students/units, no duplicates). Configure via environment variables, either:
+
+**Option A — direct download URL (simplest, no Azure):**
+
+```
+SYNC_XLSX_URL=https://…   # a link that returns the .xlsx bytes
+```
+
+Use this if your file has a shareable "Anyone with the link" download URL.
+
+**Option B — Microsoft Graph (for org-protected files):**
+
+```
+GRAPH_TENANT_ID=…
+GRAPH_CLIENT_ID=…
+GRAPH_CLIENT_SECRET=…
+# then EITHER the file's share/web link:
+GRAPH_FILE_URL=https://yourschool.sharepoint.com/…/Mark_Book.xlsx
+# OR the drive + item ids:
+GRAPH_DRIVE_ID=…
+GRAPH_ITEM_ID=…
+```
+
+Setup for Option B (your IT / Azure admin does this once):
+
+1. In **Azure Portal → App registrations**, create an app; note the
+   **Directory (tenant) ID** and **Application (client) ID**.
+2. **Certificates & secrets → New client secret**; copy the value.
+3. **API permissions → Microsoft Graph → Application permissions →
+   `Files.Read.All`** (or `Sites.Read.All`), then **Grant admin consent**.
+4. Put the workbook in OneDrive/SharePoint and set `GRAPH_FILE_URL` to its link.
+
+The host must allow outbound HTTPS to `login.microsoftonline.com` and
+`graph.microsoft.com`. (A scheduled auto-pull or push-on-save can be added later
+on top of this.)
+
 ## Running it
 
 ```bash
