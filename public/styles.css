@@ -1,0 +1,217 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --ink: #1c2330;
+  --muted: #6b7280;
+  --line: #d7dbe2;
+  --primary: #2563eb;
+  --primary-ink: #ffffff;
+  --done: #16a34a;
+  --done-bg: #dcfce7;
+  --out: #dc2626;
+  --out-bg: #fee2e2;
+  --pass: #2563eb;
+  --merit: #d97706;
+  --dist: #7c3aed;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.45;
+}
+
+a { color: var(--primary); }
+
+.container { max-width: 920px; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+.narrow { max-width: 460px; }
+
+.topbar {
+  background: var(--ink);
+  color: #fff;
+}
+.topbar a { color: #cbd5e1; text-decoration: none; }
+.topbar a:hover { color: #fff; }
+.topbar .container { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.topbar strong { color: #fff; }
+
+.row { display: flex; align-items: center; }
+.row.gap { gap: 0.5rem; }
+.row.between { justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.mt { margin-top: 0.75rem; }
+
+h1 { font-size: 1.6rem; margin: 0.5rem 0 0.25rem; }
+h2 { font-size: 1.2rem; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.lead { font-size: 1.05rem; }
+.error { color: var(--out); font-weight: 600; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+
+input[type="text"], input[type="password"] {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  min-width: 0;
+}
+.narrow-input { width: 5rem; }
+form { margin: 0; }
+label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+.narrow form label + input { width: 100%; }
+.narrow form button { margin-top: 0.75rem; width: 100%; }
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.2;
+}
+.btn:hover { background: #f1f3f7; }
+.btn.small { padding: 0.3rem 0.55rem; font-size: 0.82rem; }
+.btn.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.danger { color: var(--out); border-color: #f0c2c2; }
+.btn.danger:hover { background: var(--out-bg); }
+.btn.link { background: none; border: none; color: #cbd5e1; padding: 0; }
+.btn.link:hover { color: #fff; background: none; text-decoration: underline; }
+
+.badge {
+  background: #eef2ff;
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+.bar span { display: block; height: 100%; background: var(--done); border-radius: 999px; }
+
+/* Student list */
+.student-list { display: grid; gap: 0.6rem; }
+.student-row { display: flex; }
+.student-name { font-weight: 600; font-size: 1.05rem; text-decoration: none; }
+.link-row { margin-top: 0.6rem; }
+.share-link {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  flex: 1;
+  background: #f8fafc;
+}
+
+/* Criteria chips */
+.assignments { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.assignment {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  background: #fbfcfe;
+}
+.assignment-name { font-weight: 700; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
+.criteria { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+
+.crit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  position: relative;
+}
+.crit.toggle { cursor: pointer; user-select: none; }
+.crit.toggle:hover { filter: brightness(0.97); }
+.crit.complete { background: var(--done-bg); border-color: #86efac; color: #14532d; }
+.crit.outstanding { background: var(--out-bg); border-color: #fca5a5; color: #7f1d1d; }
+
+/* Left colour stripe to indicate Pass/Merit/Distinction */
+.crit::before {
+  content: "";
+  width: 4px; height: 1rem;
+  border-radius: 2px;
+  background: #cbd5e1;
+}
+.crit.type-P::before { background: var(--pass); }
+.crit.type-M::before { background: var(--merit); }
+.crit.type-D::before { background: var(--dist); }
+
+.legend {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-right: 0.3rem;
+}
+.legend.complete { background: var(--done-bg); color: #14532d; }
+.legend.outstanding { background: var(--out-bg); color: #7f1d1d; }
+
+.unit { margin: 1.25rem 0; }
+.unit h2, .unit h3 { margin-bottom: 0.5rem; }
+
+/* Units admin editing */
+.assignment-edit { border-top: 1px dashed var(--line); padding: 0.75rem 0; }
+.inline-del { display: inline; }
+.crit .x {
+  border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 1rem; line-height: 1; padding: 0 0 0 0.1rem;
+}
+.crit .x:hover { color: var(--out); }
+
+/* Student public page */
+.student-public h1 { margin-top: 0.25rem; }
+.summary { background: #f8fafc; }
+.outstanding-box { border-color: #fca5a5; }
+.outstanding-list { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+.outstanding-list li { margin-bottom: 0.3rem; }
+.done-msg { font-size: 1.05rem; color: var(--done); font-weight: 600; }
+.section-head { margin-top: 1.5rem; }
+
+.site-foot {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 1.5rem 0;
+}
+
+@media print {
+  .no-print, .topbar, .site-foot, .btn { display: none !important; }
+  body { background: #fff; }
+  .card { break-inside: avoid; }
+  .crit.complete { background: #fff; }
+  .crit.outstanding { background: #fff; text-decoration: line-through dotted; }
+}
+
+@media (max-width: 520px) {
+  .share-link { width: 100%; flex-basis: 100%; }
+}

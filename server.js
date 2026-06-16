@@ -1,0 +1,212 @@
+'use strict';
+
+const path = require('path');
+const crypto = require('crypto');
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const store = require('./src/store');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
+const COOKIE_SECRET = process.env.COOKIE_SECRET || crypto.randomBytes(16).toString('hex');
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(cookieParser(COOKIE_SECRET));
+app.use('/static', express.static(path.join(__dirname, 'public')));
+
+// Make the absolute base URL available so we can build shareable student links.
+app.use((req, res, next) => {
+  res.locals.baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.locals.title = store.getSettings().title;
+  next();
+});
+
+// ---- Admin auth -------------------------------------------------------------
+
+function isAdmin(req) {
+  return req.signedCookies && req.signedCookies.admin === 'yes';
+}
+
+function requireAdmin(req, res, next) {
+  if (isAdmin(req)) return next();
+  return res.redirect('/admin/login');
+}
+
+app.get('/admin/login', (req, res) => {
+  if (isAdmin(req)) return res.redirect('/admin');
+  res.render('login', { error: null });
+});
+
+app.post('/admin/login', (req, res) => {
+  if (req.body.password === ADMIN_PASSWORD) {
+    res.cookie('admin', 'yes', {
+      signed: true,
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    return res.redirect('/admin');
+  }
+  res.status(401).render('login', { error: 'Incorrect password.' });
+});
+
+app.post('/admin/logout', (req, res) => {
+  res.clearCookie('admin');
+  res.redirect('/admin/login');
+});
+
+// ---- Public landing ---------------------------------------------------------
+
+app.get('/', (req, res) => {
+  res.redirect('/admin');
+});
+
+// ---- Admin: dashboard -------------------------------------------------------
+
+app.get('/admin', requireAdmin, (req, res) => {
+  const students = store.studentsOrdered().map((s) => ({
+    ...s,
+    summary: store.progressSummary(s.id),
+  }));
+  const tree = store.buildTree();
+  const totalCriteria = store.allCriteria().length;
+  res.render('dashboard', { students, tree, totalCriteria });
+});
+
+// ---- Admin: students --------------------------------------------------------
+
+app.post('/admin/students', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.addStudent(name);
+  res.redirect('/admin');
+});
+
+app.post('/admin/students/:id/rename', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.renameStudent(req.params.id, name);
+  res.redirect('/admin/students/' + req.params.id);
+});
+
+app.post('/admin/students/:id/regenerate', requireAdmin, (req, res) => {
+  store.regenerateToken(req.params.id);
+  res.redirect('/admin/students/' + req.params.id);
+});
+
+app.post('/admin/students/:id/delete', requireAdmin, (req, res) => {
+  store.deleteStudent(req.params.id);
+  res.redirect('/admin');
+});
+
+app.get('/admin/students/:id', requireAdmin, (req, res) => {
+  const student = store.getStudent(req.params.id);
+  if (!student) return res.status(404).render('notfound');
+  const tree = store.buildTree().map((unit) => ({
+    ...unit,
+    assignments: unit.assignments.map((a) => ({
+      ...a,
+      criteria: a.criteria.map((c) => ({ ...c, complete: store.isComplete(student.id, c.id) })),
+    })),
+  }));
+  res.render('student_admin', {
+    student,
+    tree,
+    summary: store.progressSummary(student.id),
+  });
+});
+
+// Toggle a single criterion for a student (called from the admin grid via fetch).
+app.post('/admin/progress', requireAdmin, (req, res) => {
+  const { studentId, criterionId, complete } = req.body;
+  if (!studentId || !criterionId) return res.status(400).json({ ok: false });
+  store.setProgress(studentId, criterionId, !!complete);
+  res.json({ ok: true, summary: store.progressSummary(studentId) });
+});
+
+// ---- Admin: units / assignments / criteria ----------------------------------
+
+app.get('/admin/units', requireAdmin, (req, res) => {
+  res.render('units_admin', { tree: store.buildTree() });
+});
+
+app.post('/admin/units', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.addUnit(name);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/units/:id/rename', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.renameUnit(req.params.id, name);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/units/:id/delete', requireAdmin, (req, res) => {
+  store.deleteUnit(req.params.id);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/units/:id/assignments', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.addAssignment(req.params.id, name);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/assignments/:id/rename', requireAdmin, (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (name) store.renameAssignment(req.params.id, name);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/assignments/:id/delete', requireAdmin, (req, res) => {
+  store.deleteAssignment(req.params.id);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/assignments/:id/criteria', requireAdmin, (req, res) => {
+  // Accept several codes at once, e.g. "P1 P2 M1" or "P1, P2".
+  const raw = (req.body.code || '').trim();
+  const codes = raw.split(/[\s,]+/).filter(Boolean);
+  for (const code of codes) store.addCriterion(req.params.id, code);
+  res.redirect('/admin/units');
+});
+
+app.post('/admin/criteria/:id/delete', requireAdmin, (req, res) => {
+  store.deleteCriterion(req.params.id);
+  res.redirect('/admin/units');
+});
+
+// ---- Student read-only view -------------------------------------------------
+
+app.get('/s/:token', (req, res) => {
+  const student = store.getStudentByToken(req.params.token);
+  if (!student) return res.status(404).render('notfound');
+
+  const tree = store.buildTree().map((unit) => {
+    const assignments = unit.assignments.map((a) => {
+      const criteria = a.criteria.map((c) => ({ ...c, complete: store.isComplete(student.id, c.id) }));
+      const outstanding = criteria.filter((c) => !c.complete);
+      return { ...a, criteria, outstanding };
+    });
+    const unitOutstanding = assignments.flatMap((a) => a.outstanding);
+    return { ...unit, assignments, unitOutstanding };
+  });
+
+  res.render('student_view', {
+    student,
+    tree,
+    summary: store.progressSummary(student.id),
+  });
+});
+
+app.use((req, res) => {
+  res.status(404).render('notfound');
+});
+
+app.listen(PORT, () => {
+  console.log(`GradeTracker running on http://localhost:${PORT}`);
+  console.log(`Admin password: ${ADMIN_PASSWORD === 'changeme' ? "'changeme' (set ADMIN_PASSWORD to change)" : '(set via ADMIN_PASSWORD)'}`);
+});

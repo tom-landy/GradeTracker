@@ -1,0 +1,19 @@
+{
+  "name": "gradetracker",
+  "version": "1.0.0",
+  "description": "Track and share BTEC-style student work: what's completed and what's outstanding for end of year.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2"
+  }
+}

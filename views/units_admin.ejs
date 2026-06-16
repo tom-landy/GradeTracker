@@ -1,0 +1,75 @@
+<%- include('partials/head', { pageTitle: 'Units & criteria' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  <h1>Units &amp; criteria</h1>
+  <p class="muted">Edit the structure of the course. Deleting anything also clears related progress.</p>
+
+  <section class="card">
+    <h2>Add a unit</h2>
+    <form method="post" action="/admin/units" class="row gap wrap">
+      <input type="text" name="name" placeholder="e.g. Unit 2" required />
+      <button class="btn primary">Add unit</button>
+    </form>
+  </section>
+
+  <% tree.forEach(function (unit) { %>
+    <section class="card unit-edit">
+      <div class="row between wrap">
+        <form method="post" action="/admin/units/<%= unit.id %>/rename" class="row gap">
+          <input type="text" name="name" value="<%= unit.name %>" />
+          <button class="btn small">Rename</button>
+        </form>
+        <form method="post" action="/admin/units/<%= unit.id %>/delete"
+              onsubmit="return confirm('Delete <%= unit.name %> and all its assignments/criteria?')">
+          <button class="btn small danger">Delete unit</button>
+        </form>
+      </div>
+
+      <% unit.assignments.forEach(function (a) { %>
+        <div class="assignment-edit">
+          <div class="row between wrap">
+            <form method="post" action="/admin/assignments/<%= a.id %>/rename" class="row gap">
+              <input type="text" name="name" value="<%= a.name %>" class="narrow-input" />
+              <button class="btn small">Rename</button>
+            </form>
+            <form method="post" action="/admin/assignments/<%= a.id %>/delete"
+                  onsubmit="return confirm('Delete <%= a.name %>?')">
+              <button class="btn small danger">Delete</button>
+            </form>
+          </div>
+          <div class="criteria">
+            <% a.criteria.forEach(function (c) { %>
+              <span class="crit type-<%= c.type.charAt(0) %>">
+                <%= c.code %>
+                <form method="post" action="/admin/criteria/<%= c.id %>/delete" class="inline-del">
+                  <button class="x" title="Remove <%= c.code %>">×</button>
+                </form>
+              </span>
+            <% }); %>
+            <% if (a.criteria.length === 0) { %><span class="muted small">(no criteria)</span><% } %>
+          </div>
+          <form method="post" action="/admin/assignments/<%= a.id %>/criteria" class="row gap mt">
+            <input type="text" name="code" placeholder="Add criteria e.g. P1 P2 M1" />
+            <button class="btn small">Add</button>
+          </form>
+        </div>
+      <% }); %>
+
+      <form method="post" action="/admin/units/<%= unit.id %>/assignments" class="row gap mt">
+        <input type="text" name="name" placeholder="Add assignment e.g. A4" />
+        <button class="btn small">Add assignment</button>
+      </form>
+    </section>
+  <% }); %>
+</main>
+<%- include('partials/foot') %>
