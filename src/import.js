@@ -225,6 +225,8 @@ function columnLooksLikeIds(rows, h, c) {
 const MARK_VALUES = new Set(['y', 'n', 'r', 'u']);
 
 function valueIsName(v) {
+  // A student ID like "SC255597" contains letters but is not a name.
+  if (/^[A-Za-z]{1,4}\d{3,}$/.test(v)) return false;
   return /[A-Za-z]{2,}/.test(v) && !MARK_VALUES.has(v.toLowerCase()) && !/^\d+$/.test(v);
 }
 
