@@ -140,6 +140,19 @@ The host must allow outbound HTTPS to `login.microsoftonline.com` and
 `graph.microsoft.com`. (A scheduled auto-pull or push-on-save can be added later
 on top of this.)
 
+## Security
+
+- **Encryption at rest:** set `ENCRYPTION_KEY` (any passphrase) and `db.json` is
+  stored as **AES-256-GCM** ciphertext (names, student numbers and grades are not
+  readable from the raw file). Keep the key **stable and backed up** — losing it
+  means losing the data. Existing plaintext files load fine and are re-encrypted
+  on the next save. On Render the blueprint generates a stable key automatically.
+- **Uploaded spreadsheets are never stored** — they're parsed in memory and
+  discarded; only the extracted fields are saved.
+- Admin area is password-protected (`ADMIN_PASSWORD`) with a signed, httpOnly
+  session cookie. Student links use unguessable 96-bit tokens and are read-only.
+- Names are masked to `StudentNo · First L.` everywhere on screen.
+
 ## Running it
 
 ```bash

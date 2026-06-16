@@ -9,6 +9,43 @@ const { seedData } = require('./seed');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 
+// Optional encryption at rest. Set ENCRYPTION_KEY (any passphrase) and db.json
+// is stored as AES-256-GCM ciphertext. Keep this value STABLE — losing it means
+// losing access to the data. Plaintext files still load and are re-encrypted on
+// the next save (seamless migration).
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
+let cachedKey = null;
+function encKey() {
+  if (!ENCRYPTION_KEY) return null;
+  if (!cachedKey) cachedKey = crypto.scryptSync(ENCRYPTION_KEY, 'gradetracker.enc.v1', 32);
+  return cachedKey;
+}
+
+function encrypt(plaintext, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return {
+    __enc: 'aes-256-gcm',
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    ct: ct.toString('base64'),
+  };
+}
+
+function decrypt(envelope) {
+  const key = encKey();
+  if (!key) throw new Error('data/db.json is encrypted but ENCRYPTION_KEY is not set.');
+  try {
+    const iv = Buffer.from(envelope.iv, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(envelope.ct, 'base64')), decipher.final()]).toString('utf8');
+  } catch (err) {
+    throw new Error('Could not decrypt data/db.json — ENCRYPTION_KEY is wrong or the file is corrupt.');
+  }
+}
+
 function id() {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -42,27 +79,34 @@ function emptyDb() {
 
 function load() {
   if (db) return db;
+  let raw;
   try {
-    const raw = fs.readFileSync(DB_PATH, 'utf8');
-    db = JSON.parse(raw);
-    // Make sure every collection exists even if the file is from an older version.
-    const base = emptyDb();
-    for (const key of Object.keys(base)) {
-      if (db[key] === undefined) db[key] = base[key];
-    }
+    raw = fs.readFileSync(DB_PATH, 'utf8');
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
     db = emptyDb();
     seed(db);
     save();
+    return db;
+  }
+  const parsed = JSON.parse(raw);
+  const obj = parsed && parsed.__enc ? JSON.parse(decrypt(parsed)) : parsed;
+  db = obj;
+  // Make sure every collection exists even if the file is from an older version.
+  const base = emptyDb();
+  for (const key of Object.keys(base)) {
+    if (db[key] === undefined) db[key] = base[key];
   }
   return db;
 }
 
 function save() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  const json = JSON.stringify(db, null, 2);
+  const key = encKey();
+  const out = key ? JSON.stringify(encrypt(json, key)) : json;
   const tmp = DB_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.writeFileSync(tmp, out);
   fs.renameSync(tmp, DB_PATH); // atomic-ish write so we never leave a half file
 }
 

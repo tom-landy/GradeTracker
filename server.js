@@ -364,4 +364,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`GradeTracker running on http://localhost:${PORT}`);
   console.log(`Admin password: ${ADMIN_PASSWORD === 'changeme' ? "'changeme' (set ADMIN_PASSWORD to change)" : '(set via ADMIN_PASSWORD)'}`);
+  console.log(`Data at rest: ${process.env.ENCRYPTION_KEY ? 'encrypted (AES-256-GCM)' : 'NOT encrypted (set ENCRYPTION_KEY to enable)'}`);
 });

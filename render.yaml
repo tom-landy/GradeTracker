@@ -12,6 +12,8 @@ services:
         sync: false # set this yourself in the Render dashboard
       - key: COOKIE_SECRET
         generateValue: true # stable secret so admin sessions survive restarts
+      - key: ENCRYPTION_KEY
+        generateValue: true # stable key so db.json is encrypted at rest (AES-256-GCM)
       - key: DATA_DIR
         value: /data
     # Persistent disk so data/db.json survives restarts and deploys.
