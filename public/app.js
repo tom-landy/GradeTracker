@@ -49,6 +49,7 @@ if (main) {
         btn.classList.toggle('complete', next);
         btn.classList.toggle('outstanding', !next);
         updateSummary(data.summary);
+        updateGrade(data.unitId, data.grade);
       })
       .catch(function () { alert('Could not save — please try again.'); })
       .finally(function () { btn.disabled = false; });
@@ -75,6 +76,15 @@ if (importForm) {
       }
     });
   }
+}
+
+function updateGrade(unitId, grade) {
+  if (!unitId || !grade) return;
+  const badge = document.querySelector('[data-grade-for="' + unitId + '"]');
+  if (!badge) return;
+  badge.className = 'grade grade-' + (grade.grade || 'U');
+  badge.setAttribute('data-grade-for', unitId);
+  badge.textContent = grade.label || '';
 }
 
 function updateSummary(summary) {

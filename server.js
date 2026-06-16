@@ -133,13 +133,14 @@ app.post('/admin/students/:id/delete', requireAdmin, (req, res) => {
 app.get('/admin/students/:id', requireAdmin, (req, res) => {
   const student = store.getStudent(req.params.id);
   if (!student) return res.status(404).render('notfound');
-  const tree = store.buildTree().map((unit) => ({
-    ...unit,
-    assignments: unit.assignments.map((a) => ({
+  const tree = store.buildTree().map((unit) => {
+    const assignments = unit.assignments.map((a) => ({
       ...a,
       criteria: a.criteria.map((c) => ({ ...c, complete: store.isComplete(student.id, c.id) })),
-    })),
-  }));
+    }));
+    const grade = store.gradeForCriteria(assignments.flatMap((a) => a.criteria));
+    return { ...unit, assignments, grade };
+  });
   res.render('student_admin', {
     student,
     tree,
@@ -152,7 +153,9 @@ app.post('/admin/progress', requireAdmin, (req, res) => {
   const { studentId, criterionId, complete } = req.body;
   if (!studentId || !criterionId) return res.status(400).json({ ok: false });
   store.setProgress(studentId, criterionId, !!complete);
-  res.json({ ok: true, summary: store.progressSummary(studentId) });
+  const unitId = store.unitIdForCriterion(criterionId);
+  const grade = unitId ? store.gradeForUnit(studentId, unitId) : null;
+  res.json({ ok: true, summary: store.progressSummary(studentId), unitId, grade });
 });
 
 // ---- Admin: CSV export / import ---------------------------------------------
@@ -294,7 +297,8 @@ app.get('/s/:token', (req, res) => {
       return { ...a, criteria, outstanding };
     });
     const unitOutstanding = assignments.flatMap((a) => a.outstanding);
-    return { ...unit, assignments, unitOutstanding };
+    const grade = store.gradeForCriteria(assignments.flatMap((a) => a.criteria));
+    return { ...unit, assignments, unitOutstanding, grade };
   });
 
   res.render('student_view', {

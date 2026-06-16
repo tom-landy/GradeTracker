@@ -39,8 +39,12 @@
   </details>
 
   <% tree.forEach(function (unit) { %>
-    <section class="unit">
-      <h2><%= unit.name %></h2>
+    <section class="unit" data-unit-id="<%= unit.id %>">
+      <h2><%= unit.name %>
+        <% if (unit.grade && unit.grade.grade) { %>
+          <span class="grade grade-<%= unit.grade.grade %>" data-grade-for="<%= unit.id %>"><%= unit.grade.label %></span>
+        <% } %>
+      </h2>
       <% if (unit.assignments.every(function(a){ return a.criteria.length === 0; })) { %>
         <p class="muted">No criteria yet — add them in <a href="/admin/units">Units &amp; criteria</a>.</p>
       <% } %>

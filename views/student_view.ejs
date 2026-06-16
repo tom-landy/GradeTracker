@@ -46,7 +46,11 @@
 
   <% tree.forEach(function (unit) { %>
     <section class="unit">
-      <h3><%= unit.name %></h3>
+      <h3><%= unit.name %>
+        <% if (unit.grade && unit.grade.grade) { %>
+          <span class="grade grade-<%= unit.grade.grade %>"><%= unit.grade.label %></span>
+        <% } %>
+      </h3>
       <div class="assignments">
         <% unit.assignments.forEach(function (a) { %>
           <div class="assignment">

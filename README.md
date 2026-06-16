@@ -18,6 +18,18 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Unit grades (Pass / Merit / Distinction)
+
+Each unit shows a calculated grade badge on both the student page and the admin
+marking grid, using the standard cumulative BTEC ladder:
+
+- **Pass** — all P criteria complete
+- **Merit** — all P **and** all M criteria complete
+- **Distinction** — all P, M **and** D criteria complete
+- otherwise **Working towards**
+
+On the marking grid the badge updates live as you tick criteria.
+
 ## Importing students & progress (CSV)
 
 From the admin dashboard you can bulk-load students and their progress:

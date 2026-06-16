@@ -343,6 +343,28 @@ function lastInitialOf(s) {
   return parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() : '';
 }
 
+// BTEC unit grade from a list of criteria ({ code, complete }).
+// Standard cumulative ladder: Pass = all P done; Merit = all P + all M;
+// Distinction = all P + all M + all D. Otherwise "Working towards".
+function gradeForCriteria(criteria) {
+  if (!criteria || !criteria.length) return { grade: '', label: '' };
+  const band = { P: [], M: [], D: [] };
+  for (const c of criteria) {
+    const t = String(c.code || '').charAt(0).toUpperCase();
+    if (band[t]) band[t].push(!!c.complete);
+  }
+  const allDone = (arr) => arr.length > 0 && arr.every(Boolean);
+  const pAll = allDone(band.P);
+  const mAll = allDone(band.M);
+  const dAll = allDone(band.D);
+  let grade = 'U';
+  if (pAll && mAll && dAll) grade = 'D';
+  else if (pAll && mAll) grade = 'M';
+  else if (pAll) grade = 'P';
+  const labels = { U: 'Working towards', P: 'Pass', M: 'Merit', D: 'Distinction' };
+  return { grade, label: labels[grade] };
+}
+
 // What students see on their shared page: "SC243208 · Alex A." (no surname).
 function publicLabel(s) {
   const number = (s.studentNumber || '').trim();
@@ -507,6 +529,24 @@ function importWorkbook(payload) {
   };
 }
 
+function unitIdForCriterion(criterionId) {
+  load();
+  const c = db.criteria.find((x) => x.id === criterionId);
+  if (!c) return null;
+  const a = db.assignments.find((x) => x.id === c.assignmentId);
+  return a ? a.unitId : null;
+}
+
+function gradeForUnit(studentId, unitId) {
+  const crit = [];
+  for (const a of assignmentsForUnit(unitId)) {
+    for (const c of criteriaForAssignment(a.id)) {
+      crit.push({ code: c.code, complete: isComplete(studentId, c.id) });
+    }
+  }
+  return gradeForCriteria(crit);
+}
+
 function setProgress(studentId, criterionId, complete) {
   load();
   if (!db.progress[studentId]) db.progress[studentId] = {};
@@ -533,6 +573,9 @@ module.exports = {
   applyImport,
   importWorkbook,
   isComplete,
+  gradeForCriteria,
+  gradeForUnit,
+  unitIdForCriterion,
   progressSummary,
   addUnit,
   renameUnit,
