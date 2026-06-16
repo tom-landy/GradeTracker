@@ -24,6 +24,12 @@
         <li><strong><%= result.studentsCreated %></strong> new student<%= result.studentsCreated === 1 ? '' : 's' %> created
           (<%= result.studentsTouched %> updated in total)</li>
         <li><strong><%= result.marks %></strong> criteria marked complete</li>
+        <% if (result.removedUnverified) { %>
+          <li><strong><%= result.removedUnverified %></strong> unverified student(s) without a number removed</li>
+        <% } %>
+        <% if (result.unmatchedRows) { %>
+          <li class="muted"><%= result.unmatchedRows %> numberless row(s) skipped (no matching numbered student)</li>
+        <% } %>
       </ul>
     </div>
 

@@ -100,6 +100,7 @@ app.get('/admin', requireAdmin, (req, res) => {
     students,
     tree,
     totalCriteria,
+    unverifiedCount: students.filter((s) => !(s.studentNumber && String(s.studentNumber).trim())).length,
     syncConfigured: sync.isConfigured(),
     syncSource: sync.sourceLabel(),
   });
@@ -119,6 +120,12 @@ app.post('/admin/students/:id/rename', requireAdmin, (req, res) => {
     studentNumber: req.body.studentNumber,
   });
   res.redirect('/admin/students/' + req.params.id);
+});
+
+// Remove students with no verified student number (and any "Withdrawn").
+app.post('/admin/remove-unverified', requireAdmin, (req, res) => {
+  store.removeStudentsWithoutNumber();
+  res.redirect('/admin');
 });
 
 // Danger zone: wipe everything so the teacher can re-import from scratch.

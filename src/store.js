@@ -491,7 +491,11 @@ function importWorkbook(payload) {
   let marks = 0;
   const seenStudents = new Set();
   let studentsCreated = 0;
+  let unmatchedRows = 0;
 
+  // Phase 1: ensure units/assignments/criteria, and remember each unit's
+  // code -> criterionId map alongside that tab's student rows.
+  const contexts = [];
   for (const u of payload.units) {
     let unit = db.units.find((x) => x.name.trim().toLowerCase() === u.name.trim().toLowerCase());
     if (!unit) {
@@ -500,7 +504,6 @@ function importWorkbook(payload) {
       unitsCreated += 1;
     }
 
-    // Existing criteria in this unit, keyed by code (first match wins).
     const codeToCid = {};
     for (const a of db.assignments.filter((x) => x.unitId === unit.id)) {
       for (const c of db.criteria.filter((x) => x.assignmentId === a.id)) {
@@ -509,7 +512,6 @@ function importWorkbook(payload) {
       }
     }
 
-    // Which assignment each code belongs to, per the sheet (for new codes).
     const codeAssignment = {};
     for (const a of u.assignments) for (const code of a.criteria) codeAssignment[code.toUpperCase()] = a.name;
 
@@ -529,8 +531,7 @@ function importWorkbook(payload) {
       return asg;
     };
 
-    const flatCodes = u.assignments.flatMap((a) => a.criteria);
-    for (const code of flatCodes) {
+    for (const code of u.assignments.flatMap((a) => a.criteria)) {
       const up = code.toUpperCase();
       if (codeToCid[up]) continue;
       const asg = ensureAssignment(codeAssignment[up] || 'A1');
@@ -545,16 +546,34 @@ function importWorkbook(payload) {
       codeToCid[up] = crit.id;
     }
 
-    for (const s of u.students) {
-      let student = null;
-      if (s.studentNumber) {
-        student = db.students.find((x) => x.studentNumber && x.studentNumber === s.studentNumber);
+    contexts.push({ codeToCid, students: u.students });
+  }
+
+  const applyMarks = (student, marksObj, codeToCid) => {
+    seenStudents.add(student.id);
+    if (!db.progress[student.id]) db.progress[student.id] = {};
+    for (const code of Object.keys(marksObj)) {
+      const cid = codeToCid[code.toUpperCase()];
+      if (!cid) continue;
+      if (marksObj[code]) {
+        db.progress[student.id][cid] = true;
+        marks += 1;
+      } else {
+        delete db.progress[student.id][cid];
       }
-      if (!student) student = getStudentByName(s.name);
+    }
+  };
+
+  // Phase 2: only rows WITH a verified student number create/update a student.
+  for (const ctx of contexts) {
+    for (const s of ctx.students) {
+      if (!s.studentNumber) continue;
+      let student = db.students.find((x) => x.studentNumber && x.studentNumber === s.studentNumber)
+        || getStudentByName(s.name);
       if (!student) {
         student = {
           id: id(),
-          studentNumber: s.studentNumber || '',
+          studentNumber: s.studentNumber,
           firstName: s.firstName || '',
           lastName: s.lastName || '',
           name: s.name.trim(),
@@ -565,26 +584,28 @@ function importWorkbook(payload) {
         db.progress[student.id] = {};
         studentsCreated += 1;
       } else {
-        // Back-fill any details this tab provides.
-        if (s.studentNumber && !student.studentNumber) student.studentNumber = s.studentNumber;
+        if (!student.studentNumber) student.studentNumber = s.studentNumber;
         if (s.firstName && !student.firstName) student.firstName = s.firstName;
         if (s.lastName && !student.lastName) student.lastName = s.lastName;
         if (!student.name) student.name = s.name.trim();
       }
-      seenStudents.add(student.id);
-      if (!db.progress[student.id]) db.progress[student.id] = {};
-      for (const code of Object.keys(s.marks)) {
-        const cid = codeToCid[code.toUpperCase()];
-        if (!cid) continue;
-        if (s.marks[code]) {
-          db.progress[student.id][cid] = true;
-          marks += 1;
-        } else {
-          delete db.progress[student.id][cid];
-        }
-      }
+      applyMarks(student, s.marks, ctx.codeToCid);
     }
   }
+
+  // Phase 3: rows WITHOUT a number only attach progress to an already-numbered
+  // student matched by name. They never create a new (unverified) student.
+  for (const ctx of contexts) {
+    for (const s of ctx.students) {
+      if (s.studentNumber) continue;
+      const student = getStudentByName(s.name);
+      if (student && student.studentNumber) applyMarks(student, s.marks, ctx.codeToCid);
+      else unmatchedRows += 1;
+    }
+  }
+
+  // Phase 4: enforce "no number, not on the system" — drop unverified students.
+  const removedUnverified = removeStudentsWithoutNumber();
 
   save();
   return {
@@ -593,7 +614,22 @@ function importWorkbook(payload) {
     studentsCreated,
     studentsTouched: seenStudents.size,
     marks,
+    unmatchedRows,
+    removedUnverified,
   };
+}
+
+// Remove every student that has no verified student number (and their progress).
+function removeStudentsWithoutNumber() {
+  load();
+  const keep = db.students.filter((s) => s.studentNumber && String(s.studentNumber).trim());
+  const removed = db.students.length - keep.length;
+  for (const s of db.students) {
+    if (!(s.studentNumber && String(s.studentNumber).trim())) delete db.progress[s.id];
+  }
+  db.students = keep;
+  if (removed) save();
+  return removed;
 }
 
 function unitIdForCriterion(criterionId) {
@@ -642,6 +678,7 @@ module.exports = {
   publicLabel,
   applyImport,
   importWorkbook,
+  removeStudentsWithoutNumber,
   isComplete,
   gradeForCriteria,
   gradeForUnit,

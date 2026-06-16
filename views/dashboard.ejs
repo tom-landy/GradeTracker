@@ -74,6 +74,16 @@
 
   <section>
     <h2>Students</h2>
+    <% if (unverifiedCount > 0) { %>
+      <div class="card" style="border-color:#fca5a5">
+        <p class="small"><strong><%= unverifiedCount %></strong> student<%= unverifiedCount === 1 ? '' : 's' %>
+          without a student number (unverified / withdrawn). Per policy these shouldn't be on the system.</p>
+        <form method="post" action="/admin/remove-unverified"
+              onsubmit="return confirm('Remove <%= unverifiedCount %> student(s) without a number? This cannot be undone.')">
+          <button class="btn small danger">Remove students without a number</button>
+        </form>
+      </div>
+    <% } %>
     <% if (students.length === 0) { %>
       <p class="muted">No students yet. Add one above to start tracking and to generate a shareable link.</p>
     <% } %>
