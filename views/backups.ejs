@@ -1,0 +1,65 @@
+<%- include('partials/head', { pageTitle: 'Backups' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/overview">Overview</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <a href="/admin/backups">Backups</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  <h1>Backups &amp; restore</h1>
+  <% if (message) { %><p class="done-msg"><%= message %></p><% } %>
+  <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+  <section class="card">
+    <h2>Download a backup</h2>
+    <p class="muted small">Saves all current data as a single JSON file. Keep it
+      somewhere safe (off this server) — it's your protection if the server disk
+      or encryption key is lost. The download is unencrypted, so store it securely.</p>
+    <a class="btn primary" href="/admin/backup">⬇ Download backup</a>
+  </section>
+
+  <section class="card">
+    <h2>Restore from a file</h2>
+    <p class="muted small">Replaces <strong>all</strong> current data with the
+      uploaded backup (a downloaded backup, or a <code>db.json</code>). A snapshot
+      of the current data is taken first.</p>
+    <form method="post" action="/admin/restore" enctype="multipart/form-data" class="row gap wrap"
+          onsubmit="return confirm('Replace ALL current data with this file?')">
+      <input type="file" name="file" accept=".json,application/json" required />
+      <button class="btn danger">Restore</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Automatic snapshots</h2>
+    <p class="muted small">Taken automatically before each import or reset (latest
+      <%= backups.length %>). These live on the server disk — use the download
+      above for off-server safety.</p>
+    <% if (backups.length === 0) { %>
+      <p class="muted">No snapshots yet.</p>
+    <% } else { %>
+      <ul class="small">
+        <% backups.forEach(function (b) { %>
+          <li class="row gap wrap" style="margin-bottom:0.35rem">
+            <span><%= b.when %></span>
+            <form method="post" action="/admin/restore-snapshot"
+                  onsubmit="return confirm('Roll back to this snapshot? Current data is snapshotted first.')">
+              <input type="hidden" name="file" value="<%= b.file %>" />
+              <button class="btn small">Roll back to this</button>
+            </form>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </section>
+
+  <p><a href="/admin">← Back</a></p>
+</main>
+<%- include('partials/foot') %>

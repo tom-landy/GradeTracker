@@ -18,6 +18,13 @@ Built from the "Year 1 outstanding work break down" sheet: each **Unit** has
   progress — a clear "still to complete" list plus the full breakdown. No login.
   They can print it or save as PDF.
 
+## Backups & restore
+
+The **Backups** tab lets you **download** all data as a single JSON file (keep it
+off-server — it's your protection if the disk or encryption key is lost) and
+**restore** from an uploaded backup. An **automatic snapshot** is taken before
+every import/reset (latest 15 kept on disk) so you can roll back a bad import.
+
 ## Class overview
 
 The **Overview** tab in the admin shows a single matrix of every student against
