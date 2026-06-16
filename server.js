@@ -6,6 +6,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const store = require('./src/store');
 const csv = require('./src/csv');
+const { parseImport } = require('./src/import');
 
 // Ordered list of every criterion with its CSV column label "<Unit> | <code>".
 function criterionColumns() {
@@ -161,39 +162,23 @@ app.post('/admin/import', requireAdmin, (req, res) => {
     return res.status(400).render('import_result', {
       error: 'No data found. The file needs a header row plus at least one student row.',
       result: null,
-      unknownColumns: [],
+      parsed: null,
     });
   }
 
-  // Map header columns (skip column 0 = student name) to criterion ids.
-  const byKey = new Map(criterionColumns().map((c) => [csv.normKey(c.label), c.id]));
-  const header = rows[0];
-  const colToCriterion = []; // index aligned with header
-  const unknownColumns = [];
-  for (let i = 1; i < header.length; i += 1) {
-    const cid = byKey.get(csv.normKey(header[i]));
-    colToCriterion[i] = cid || null;
-    if (!cid && String(header[i]).trim()) unknownColumns.push(header[i]);
+  const parsed = parseImport(rows, store.buildTree());
+  if (parsed.matchedColumns === 0) {
+    return res.status(400).render('import_result', {
+      error: "Couldn't match any criteria columns. Check the sheet has a 'Students' "
+        + 'header row with criteria codes (e.g. P1, P2) and a unit title above it, '
+        + 'or use the downloaded template.',
+      result: null,
+      parsed,
+    });
   }
 
-  const records = [];
-  for (let r = 1; r < rows.length; r += 1) {
-    const row = rows[r];
-    const name = String(row[0] || '').trim();
-    if (!name) continue;
-    const complete = [];
-    const outstanding = [];
-    for (let i = 1; i < header.length; i += 1) {
-      const cid = colToCriterion[i];
-      if (!cid) continue; // unrecognised column: ignore
-      if (csv.isTruthy(row[i])) complete.push(cid);
-      else outstanding.push(cid);
-    }
-    records.push({ name, complete, outstanding });
-  }
-
-  const result = store.applyImport(records);
-  res.render('import_result', { error: null, result, unknownColumns });
+  const result = store.applyImport(parsed.records);
+  res.render('import_result', { error: null, result, parsed });
 });
 
 // ---- Admin: units / assignments / criteria ----------------------------------

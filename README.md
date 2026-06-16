@@ -34,6 +34,22 @@ Students are matched by name (case-insensitive) or created automatically. Only
 the criteria included as columns are changed. Unrecognised columns are ignored
 and reported. The same CSV download also works as a simple backup.
 
+### It also reads existing tracking sheets
+
+You don't have to use the template. The importer auto-detects a typical teacher
+tracking sheet:
+
+- a **unit title** row (e.g. `Unit 1 Exploring Business`),
+- an assignment row (`A1`, `A2`, …),
+- a **`Students`** row of bare criteria codes (`P1`, `P2`, … `D4`),
+- student rows with `y`/`n` cells, plus trailing summary columns
+  (`Unit Grade`, `Unit Points`) which are ignored.
+
+`y` / `yes` / `x` / `1` / `done` / `✓` count as complete; `n` / `r` / blank
+count as outstanding. The unit name in the title row is matched to a unit by
+prefix (`Unit 1 Exploring Business` → `Unit 1`), so the bare codes map to the
+right criteria. Upload one unit sheet at a time.
+
 ## Running it
 
 ```bash
