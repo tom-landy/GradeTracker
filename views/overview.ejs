@@ -1,0 +1,67 @@
+<%- include('partials/head', { pageTitle: 'Overview' }) %>
+<header class="topbar">
+  <div class="container row between">
+    <strong>GradeTracker</strong>
+    <nav class="row gap">
+      <a href="/admin">Students</a>
+      <a href="/admin/overview">Overview</a>
+      <a href="/admin/units">Units &amp; criteria</a>
+      <form method="post" action="/admin/logout"><button class="btn link">Sign out</button></form>
+    </nav>
+  </div>
+</header>
+
+<main class="container wide">
+  <h1>Class overview</h1>
+  <p class="muted">Every student's unit grade at a glance. Columns are units
+    (<code>U1</code> = Unit 1; <code>*</code> = exam unit). Click a student to mark their work.</p>
+  <p class="no-print">
+    <span class="grade grade-D">D</span> Distinction
+    <span class="grade grade-M">M</span> Merit
+    <span class="grade grade-P">P</span> Pass
+    <span class="grade grade-U">U</span> Working towards
+  </p>
+
+  <% if (students.length === 0) { %>
+    <p class="muted">No students yet — import a workbook first.</p>
+  <% } else { %>
+  <div class="overview-wrap">
+    <table class="overview">
+      <thead>
+        <tr>
+          <th class="sticky-col">Student</th>
+          <% units.forEach(function (u) { %><th title="<%= u.name %>">U<%= u.num %></th><% }); %>
+          <% exams.forEach(function (e) { %><th title="<%= e.name %> (exam)">U<%= e.number %>*</th><% }); %>
+          <th title="Criteria complete across all units">Overall</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% students.forEach(function (s) { %>
+          <tr>
+            <td class="sticky-col"><a href="/admin/students/<%= s.id %>"><%= s.label %></a></td>
+            <% s.grades.forEach(function (g) { %>
+              <td>
+                <% if (g.grade) { %><span class="grade grade-<%= g.grade %>" title="<%= g.label %>"><%= g.grade %></span>
+                <% } else { %><span class="muted">–</span><% } %>
+              </td>
+            <% }); %>
+            <% exams.forEach(function (e) { %><td><span class="grade grade-X" title="Entered &amp; sat">✓</span></td><% }); %>
+            <td><span class="badge"><%= s.summary.pct %>%</span></td>
+          </tr>
+        <% }); %>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="sticky-col">Class — D / M / P / Working</td>
+          <% totals.forEach(function (t) { %>
+            <td class="small muted"><%= t.D %>/<%= t.M %>/<%= t.P %>/<%= t.U + t.none %></td>
+          <% }); %>
+          <% exams.forEach(function (e) { %><td class="muted">—</td><% }); %>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <% } %>
+</main>
+<%- include('partials/foot') %>
