@@ -166,7 +166,13 @@ function parseImport(rows, tree) {
 // ---- Workbook (multi-tab .xlsx) parsing -------------------------------------
 
 function isCode(value) {
-  return /^[PMD]\d+$/i.test(String(value == null ? '' : value).trim());
+  // Accepts plain (P1) or assignment-prefixed (A.P2, B.M1) criterion codes.
+  return /^(?:[A-Za-z]\s*[.\-]\s*)?[PMD]\d+$/i.test(String(value == null ? '' : value).trim());
+}
+
+function extractCode(value) {
+  const m = String(value == null ? '' : value).trim().match(/([PMD]\d+)\s*$/i);
+  return m ? m[1].toUpperCase() : '';
 }
 
 function cell(rows, r, c) {
@@ -280,33 +286,34 @@ function locateNameColumns(rows, h) {
   return { numberCol, firstCol, surnameCol };
 }
 
-// Build the ordered criterion columns. Codes come from the header; a leading
-// unlabelled mark column (the common "P1 header is blank/offset" quirk) is
-// inferred by counting back from the first real code.
+// Build the ordered criterion columns. Codes come from the header; an
+// unlabelled mark column sitting immediately before a known code (the common
+// "P1/P3 header cell left blank" quirk) is inferred as that code minus one.
 function criterionColumns(rows, h, surnameCol) {
   const header = rows[h];
   const coded = [];
   for (let c = surnameCol + 1; c < header.length; c += 1) {
-    if (isCode(header[c])) coded.push({ col: c, code: String(header[c]).trim().toUpperCase(), inferred: false });
+    if (isCode(header[c])) coded.push({ col: c, code: extractCode(header[c]), inferred: false });
   }
   if (coded.length === 0) return [];
 
+  const usedCols = new Set(coded.map((c) => c.col));
+  const presentCodes = new Set(coded.map((c) => c.code));
   const inferred = [];
-  const firstCodeCol = coded[0].col;
-  const leadCols = [];
-  for (let c = surnameCol + 1; c < firstCodeCol; c += 1) {
-    if (columnIsMarks(rows, h, c)) leadCols.push(c);
+  for (const cc of coded) {
+    const m = cc.code.match(/^([PMD])(\d+)$/);
+    if (!m) continue;
+    const prev = cc.col - 1;
+    const num = parseInt(m[2], 10) - 1;
+    const code = m[1] + num;
+    if (prev <= surnameCol || num < 1) continue;
+    if (usedCols.has(prev) || presentCodes.has(code)) continue;
+    if (!columnIsMarks(rows, h, prev)) continue;
+    inferred.push({ col: prev, code, inferred: true });
+    usedCols.add(prev);
+    presentCodes.add(code);
   }
-  const m = coded[0].code.match(/^([PMD])(\d+)$/);
-  if (m && leadCols.length) {
-    const letter = m[1];
-    const startNum = parseInt(m[2], 10) - leadCols.length;
-    leadCols.forEach((c, i) => {
-      const n = startNum + i;
-      if (n >= 1) inferred.push({ col: c, code: letter + n, inferred: true });
-    });
-  }
-  return inferred.concat(coded);
+  return coded.concat(inferred).sort((a, b) => a.col - b.col);
 }
 
 // Group adjacent criterion columns into assignments (A1, A2, ...). A gap of up
@@ -355,13 +362,22 @@ function parseOverrideTab(sheet, unitName, codes) {
   let numberCol = -1;
   if (firstCol > 0 && columnLooksLikeIds(rows, -1, firstCol - 1)) numberCol = firstCol - 1;
 
-  // Collect the contiguous run of mark (y/n/r/u) columns after the surname.
+  // Collect the criterion (mark) columns after the surname, skipping any grade
+  // or points columns interspersed between them, and stopping at the trailing
+  // summary block (several consecutive non-mark columns).
   const maxCol = rows.reduce((m, r) => Math.max(m, (r || []).length), 0);
   const markCols = [];
+  let gap = 0;
   for (let c = surnameCol + 1; c < maxCol; c += 1) {
-    if (columnIsMarks(rows, -1, c)) markCols.push(c);
-    else if (columnIsEmpty(rows, c) && columnIsMarks(rows, -1, c + 1)) continue; // merge gap
-    else break;
+    if (columnIsMarks(rows, -1, c)) {
+      markCols.push(c);
+      gap = 0;
+    } else if (columnIsEmpty(rows, c)) {
+      // merge gap or blank spacer — neither counts towards the stop threshold
+    } else {
+      gap += 1; // a grade/points column
+      if (markCols.length > 0 && gap >= 4) break;
+    }
   }
 
   let groups;
@@ -422,31 +438,28 @@ function parseWorkbook(sheets, options = {}) {
     }
 
     const override = overrides[normKey(unitName)];
-    if (override && override.length) {
-      const res = parseOverrideTab(sheet, unitName, override.map((c) => c.toUpperCase()));
-      if (res.unit) units.push(res.unit);
-      else skipped.push(res.skip);
-      continue;
-    }
-
     const rows = sheet.rows || [];
     const h = findHeaderRowIdx(rows);
-    if (h < 0) {
-      skipped.push({ name: sheet.name, reason: 'no header row found' });
-      continue;
-    }
+    const cols = h >= 0 ? locateNameColumns(rows, h) : null;
+    const critCols = h >= 0 && cols ? criterionColumns(rows, h, cols.surnameCol) : [];
 
-    const cols = locateNameColumns(rows, h);
-    if (!cols) {
-      skipped.push({ name: sheet.name, reason: 'could not identify name columns (inconsistent layout)' });
+    // Header codes win. Only fall back to a manual override when the header has
+    // no usable P/M/D codes (e.g. a purely numeric tab).
+    if (critCols.length === 0) {
+      if (override && override.length) {
+        const res = parseOverrideTab(sheet, unitName, override.map((c) => c.toUpperCase()));
+        if (res.unit) units.push(res.unit);
+        else skipped.push(res.skip);
+      } else {
+        const reason = h < 0
+          ? 'no header row found'
+          : (!cols ? 'could not identify name columns (inconsistent layout)'
+            : 'no P/M/D criteria columns (summary or numeric headers)');
+        skipped.push({ name: sheet.name, reason });
+      }
       continue;
     }
     const { numberCol, firstCol, surnameCol } = cols;
-    const critCols = criterionColumns(rows, h, surnameCol);
-    if (critCols.length === 0) {
-      skipped.push({ name: sheet.name, reason: 'no P/M/D criteria columns (summary or numeric headers)' });
-      continue;
-    }
 
     const inferredCodes = critCols.filter((c) => c.inferred).map((c) => c.code);
     const assignments = groupAssignments(critCols);
