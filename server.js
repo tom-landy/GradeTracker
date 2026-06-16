@@ -342,6 +342,41 @@ app.post('/admin/criteria/:id/delete', requireAdmin, (req, res) => {
   res.redirect('/admin/units');
 });
 
+// ---- Admin: backups ---------------------------------------------------------
+
+app.get('/admin/backups', requireAdmin, (req, res) => {
+  res.render('backups', { backups: store.listBackups(), error: null, message: null });
+});
+
+// Download the current data as a self-contained JSON backup (decrypted).
+app.get('/admin/backup', requireAdmin, (req, res) => {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="gradetracker-backup-${stamp}.json"`);
+  res.send(JSON.stringify(store.exportData(), null, 2));
+});
+
+// Restore from an uploaded backup file (replaces all data).
+app.post('/admin/restore', requireAdmin, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) throw new Error('No file received.');
+    store.restoreData(store.parseBackup(req.file.buffer.toString('utf8')));
+    res.render('backups', { backups: store.listBackups(), error: null, message: 'Data restored from the uploaded file.' });
+  } catch (err) {
+    res.status(400).render('backups', { backups: store.listBackups(), error: 'Restore failed: ' + err.message, message: null });
+  }
+});
+
+// Roll back to an automatic snapshot.
+app.post('/admin/restore-snapshot', requireAdmin, (req, res) => {
+  try {
+    store.restoreFromBackupFile(req.body.file || '');
+    res.render('backups', { backups: store.listBackups(), error: null, message: 'Rolled back to ' + (req.body.file || '') + '.' });
+  } catch (err) {
+    res.status(400).render('backups', { backups: store.listBackups(), error: 'Rollback failed: ' + err.message, message: null });
+  }
+});
+
 // ---- Admin: class overview --------------------------------------------------
 
 app.get('/admin/overview', requireAdmin, (req, res) => {

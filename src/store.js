@@ -46,6 +46,9 @@ function decrypt(envelope) {
   }
 }
 
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const MAX_BACKUPS = 15;
+
 function id() {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -108,6 +111,66 @@ function save() {
   const tmp = DB_PATH + '.tmp';
   fs.writeFileSync(tmp, out);
   fs.renameSync(tmp, DB_PATH); // atomic-ish write so we never leave a half file
+}
+
+// ---- Backups ----------------------------------------------------------------
+
+// Snapshot the current db.json (as stored, encrypted or not) before a
+// destructive operation, keeping the most recent MAX_BACKUPS.
+function snapshot() {
+  try {
+    if (!fs.existsSync(DB_PATH)) return;
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, `db-${stamp}.json`));
+    const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.startsWith('db-')).sort();
+    while (files.length > MAX_BACKUPS) fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+  } catch (err) {
+    // Backups are best-effort; never block the main operation.
+  }
+}
+
+function listBackups() {
+  try {
+    return fs.readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith('db-') && f.endsWith('.json'))
+      .sort().reverse()
+      .map((f) => ({ file: f, when: f.replace(/^db-/, '').replace(/\.json$/, '').replace('T', ' ').slice(0, 16) }));
+  } catch (err) {
+    return [];
+  }
+}
+
+// The current data as a plain (decrypted) object — used for downloadable backups.
+function exportData() {
+  return load();
+}
+
+function isValidData(obj) {
+  return obj && typeof obj === 'object' && Array.isArray(obj.units) && Array.isArray(obj.students);
+}
+
+// Parse a backup file's bytes (plain JSON, our export, or an encrypted db.json).
+function parseBackup(text) {
+  const parsed = JSON.parse(text);
+  return parsed && parsed.__enc ? JSON.parse(decrypt(parsed)) : parsed;
+}
+
+// Replace all data with a restored object (snapshots current state first).
+function restoreData(obj) {
+  if (!isValidData(obj)) throw new Error('That file is not a valid GradeTracker backup.');
+  load();
+  snapshot();
+  db = obj;
+  const base = emptyDb();
+  for (const key of Object.keys(base)) if (db[key] === undefined) db[key] = base[key];
+  save();
+}
+
+function restoreFromBackupFile(name) {
+  const safe = path.basename(name);
+  const text = fs.readFileSync(path.join(BACKUP_DIR, safe), 'utf8');
+  restoreData(parseBackup(text));
 }
 
 function seed(target) {
@@ -392,6 +455,7 @@ function updateStudentDetails(studentId, { name, studentNumber }) {
 // Leaves an empty dataset so a fresh import can build everything.
 function resetAll() {
   load();
+  snapshot();
   db.units = [];
   db.assignments = [];
   db.criteria = [];
@@ -478,6 +542,7 @@ function publicLabel(s) {
 // listed in a record are touched; everything else is left as-is. Saves once.
 function applyImport(records) {
   load();
+  snapshot();
   let created = 0;
   let updated = 0;
   let marksComplete = 0;
@@ -518,6 +583,7 @@ function applyImport(records) {
 // Saves once. payload.units[].students[].marks is { CODE: bool }.
 function importWorkbook(payload) {
   load();
+  snapshot();
   let unitsCreated = 0;
   let criteriaCreated = 0;
   let marks = 0;
@@ -732,6 +798,11 @@ module.exports = {
   renameStudent,
   updateStudentDetails,
   resetAll,
+  listBackups,
+  exportData,
+  restoreData,
+  parseBackup,
+  restoreFromBackupFile,
   regenerateToken,
   deleteStudent,
   setProgress,
